@@ -128,7 +128,7 @@ class LLMRegistry:
     @staticmethod
     def _get_profiles_dir() -> Path:
         """Get the standard directory for LLM profiles."""
-        path = Path.home() / ".openhands" / "profiles"
+        path = Path.home() / ".openhands" / "llm_profiles"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
