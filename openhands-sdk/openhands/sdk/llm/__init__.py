@@ -1,5 +1,4 @@
 from openhands.sdk.llm.llm import LLM
-from openhands.sdk.llm.llm_profile import LLMProfile
 from openhands.sdk.llm.llm_registry import LLMRegistry, RegistryEvent
 from openhands.sdk.llm.llm_response import LLMResponse
 from openhands.sdk.llm.message import (
@@ -25,7 +24,6 @@ from openhands.sdk.llm.utils.verified_models import VERIFIED_MODELS
 __all__ = [
     "LLMResponse",
     "LLM",
-    "LLMProfile",
     "LLMRegistry",
     "RouterLLM",
     "RegistryEvent",

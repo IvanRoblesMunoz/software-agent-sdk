@@ -1,3 +1,4 @@
+import json
 import os
 from collections.abc import Callable
 from pathlib import Path
@@ -7,9 +8,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict
 
 from openhands.sdk.llm.llm import LLM
-from openhands.sdk.llm.llm_profile import LLMProfile
 from openhands.sdk.logger import get_logger
-from openhands.sdk.secret import StaticSecret
 from openhands.sdk.utils.pydantic_secrets import Cipher
 
 
@@ -134,71 +133,80 @@ class LLMRegistry:
         return path
 
     @classmethod
+    def _get_profile_path(cls, name: str) -> Path:
+        return cls._get_profiles_dir() / f"{name}.json"
+
+    @staticmethod
+    def _get_cipher_context() -> dict[str, Any]:
+        enc_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
+        return {"cipher": Cipher(enc_key)} if enc_key else {}
+
+    @classmethod
     def list_profiles(cls) -> list[str]:
         """List the names of all available LLM profiles."""
-        profiles_dir = cls._get_profiles_dir()
-        return [f.stem for f in profiles_dir.glob("*.json")]
+        return [f.stem for f in cls._get_profiles_dir().glob("*.json")]
 
-    def save_profile(self, profile: LLMProfile, allow_unsafe: bool = False) -> None:
-        """Save an LLM profile to disk.
-
-        Args:
-            profile: The profile to save.
-            allow_unsafe: If True, allows saving profiles with raw StaticSecret
-                          keys in plain text (if no encryption key is set).
-                          Defaults to False.
+    @classmethod
+    def save_profile(
+        cls,
+        name: str,
+        llm: LLM,
+        expose_secrets: bool = False,
+        override_existing: bool = False,
+    ) -> None:
         """
-        # Safety check: Ensure no raw secrets are being saved unless explicitly allowed
-        if not allow_unsafe:
-            for field_name, source in profile.secrets.items():
-                if isinstance(source, StaticSecret):
-                    # Check if encryption is enabled
-                    if not os.environ.get("OPENHANDS_ENCRYPTION_KEY"):
-                        raise ValueError(
-                            f"Safety Gate: Secret '{field_name}' in profile "
-                            f"'{profile.name}' is a StaticSecret, but no "
-                            "OPENHANDS_ENCRYPTION_KEY is set. "
-                            "Refusing to save plain-text secrets to disk. "
-                            "Use EnvSecret instead, or set "
-                            "OPENHANDS_ENCRYPTION_KEY."
-                        )
+        Save an LLM instance as a named profile.
 
-        profile_path = self._get_profiles_dir() / f"{profile.name}.json"
+        Secrets are automatically encrypted if OPENHANDS_ENCRYPTION_KEY is set.
+        """
+        profile_path = cls._get_profile_path(name)
+        if profile_path.exists() and not override_existing:
+            raise FileExistsError(
+                f"Profile '{name}' already exists. "
+                "Use override_existing=True to overwrite."
+            )
 
-        # Setup encryption context if key exists
-        enc_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
+        context = cls._get_cipher_context()
+        has_cipher = "cipher" in context
 
-        context: dict[str, Any] = {"cipher": Cipher(enc_key)} if enc_key else {}
+        if not expose_secrets and not has_cipher:
+            raise ValueError(
+                f"Cannot save profile '{name}' without secrets or encryption. "
+                "The profile would be redacted and unusable. "
+                "Set expose_secrets=True or provide an OPENHANDS_ENCRYPTION_KEY."
+            )
 
-        # We always want to expose secrets to the cipher or for raw save if allowed
-        context["expose_secrets"] = True
-
-        serialized = profile.model_dump_json(context=context)
+        # If cipher exists, it will encrypt regardless of expose_secrets
+        # expose_secrets only matters when there's no cipher
+        if not has_cipher:
+            context["expose_secrets"] = expose_secrets
 
         with open(profile_path, "w") as f:
-            f.write(serialized)
+            json.dump(llm.model_dump(context=context, mode="json"), f, indent=2)
 
-        logger.info(f"Saved LLM profile '{profile.name}' to {profile_path}")
+        status = "encrypted" if has_cipher else "plaintext"
+        logger.info(f"Saved LLM profile '{name}' ({status}) to {profile_path}")
 
-    def load_profile(self, name: str) -> LLMProfile:
-        """Load an LLM profile from disk.
-
-        Args:
-            name: The name of the profile.
-
-        Returns:
-            The loaded LLMProfile.
-        """
-        profile_path = self._get_profiles_dir() / f"{name}.json"
+    @classmethod
+    def load_profile(cls, name: str) -> LLM:
+        """Load an LLM profile from disk."""
+        profile_path = cls._get_profile_path(name)
         if not profile_path.exists():
-            raise FileNotFoundError(f"Profile '{name}' not found at {profile_path}")
+            raise FileNotFoundError(f"Profile '{name}' not found.")
 
         with open(profile_path) as f:
-            json_data = f.read()
+            data = json.load(f)
 
-        # Setup decryption context if key exists
-        enc_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
-        context = {"cipher": Cipher(enc_key)} if enc_key else {}
+        llm = LLM.model_validate(data, context=cls._get_cipher_context())
+        logger.info(f"Loaded LLM profile '{name}'")
+        return llm
 
-        profile = LLMProfile.model_validate_json(json_data, context=context)
-        return profile
+    @classmethod
+    def delete_profile(cls, name: str) -> None:
+        """Delete an LLM profile from disk."""
+        profile_path = cls._get_profile_path(name)
+        if not profile_path.exists():
+            raise FileNotFoundError(f"Profile '{name}' not found.")
+
+        profile_path.unlink()
+        logger.info(f"Deleted LLM profile '{name}'")
