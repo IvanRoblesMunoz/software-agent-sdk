@@ -4,6 +4,7 @@ This module provides classes and types for managing secrets in OpenHands.
 """
 
 from openhands.sdk.secret.secrets import (
+    EnvSecret,
     LookupSecret,
     SecretSource,
     SecretValue,
@@ -15,5 +16,6 @@ __all__ = [
     "SecretSource",
     "StaticSecret",
     "LookupSecret",
+    "EnvSecret",
     "SecretValue",
 ]

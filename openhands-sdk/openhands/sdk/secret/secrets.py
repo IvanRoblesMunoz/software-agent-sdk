@@ -40,6 +40,17 @@ class StaticSecret(SecretSource):
         return serialize_secret(v, info)
 
 
+class EnvSecret(SecretSource):
+    """A secret looked up from an environment variable."""
+
+    env_var: str
+
+    def get_value(self) -> str | None:
+        import os
+
+        return os.environ.get(self.env_var)
+
+
 class LookupSecret(SecretSource):
     """A secret looked up from some external url"""
 
