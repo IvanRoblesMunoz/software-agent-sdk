@@ -1,13 +1,13 @@
-import json
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import ClassVar
+from typing import Any, ClassVar
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict
 
-from openhands.sdk.llm.llm import LLM, LLMProfile
+from openhands.sdk.llm.llm import LLM
+from openhands.sdk.llm.llm_profile import LLMProfile
 from openhands.sdk.logger import get_logger
 from openhands.sdk.secret import StaticSecret
 from openhands.sdk.utils.pydantic_secrets import Cipher
@@ -58,7 +58,7 @@ class LLMRegistry:
 
     def notify(self, event: RegistryEvent) -> None:
         """Notify subscribers of registry events.
-        
+
         Args:
             event: The registry event to notify about.
         """
@@ -155,17 +155,20 @@ class LLMRegistry:
                     # Check if encryption is enabled
                     if not os.environ.get("OPENHANDS_ENCRYPTION_KEY"):
                         raise ValueError(
-                            f"Safety Gate: Secret '{field_name}' in profile '{profile.name}' "
-                            "is a StaticSecret, but no OPENHANDS_ENCRYPTION_KEY is set. "
+                            f"Safety Gate: Secret '{field_name}' in profile "
+                            f"'{profile.name}' is a StaticSecret, but no "
+                            "OPENHANDS_ENCRYPTION_KEY is set. "
                             "Refusing to save plain-text secrets to disk. "
-                            "Use EnvSecret instead, or set OPENHANDS_ENCRYPTION_KEY."
+                            "Use EnvSecret instead, or set "
+                            "OPENHANDS_ENCRYPTION_KEY."
                         )
 
         profile_path = self._get_profiles_dir() / f"{profile.name}.json"
 
         # Setup encryption context if key exists
         enc_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
-        context = {"cipher": Cipher(enc_key)} if enc_key else {}
+
+        context: dict[str, Any] = {"cipher": Cipher(enc_key)} if enc_key else {}
 
         # We always want to expose secrets to the cipher or for raw save if allowed
         context["expose_secrets"] = True
@@ -190,7 +193,7 @@ class LLMRegistry:
         if not profile_path.exists():
             raise FileNotFoundError(f"Profile '{name}' not found at {profile_path}")
 
-        with open(profile_path, "r") as f:
+        with open(profile_path) as f:
             json_data = f.read()
 
         # Setup decryption context if key exists
