@@ -232,7 +232,7 @@ class TestLLMProfilePersistence(unittest.TestCase):
     def test_save_profile_with_cipher_encrypts(self):
         """Test that profiles are encrypted when OPENHANDS_ENCRYPTION_KEY is set."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
+        LLMRegistry.save_profile("test", self.sample_llm)
 
         content = (Path(self.temp_dir.name) / "llm_profiles" / "test.json").read_text()
         # Verify the original secret is not in plaintext
@@ -242,49 +242,33 @@ class TestLLMProfilePersistence(unittest.TestCase):
         # Fernet encryption produces base64 strings starting with "gAAAAA"
         assert "gAAAAA" in content or len(content) > 500
 
-    def test_save_profile_without_cipher_plaintext(self):
-        """Test plaintext saving when no cipher and expose_secrets=True."""
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
-        content = (Path(self.temp_dir.name) / "llm_profiles" / "test.json").read_text()
-        assert "sk-test-key-12345" in content
+    def test_save_profile_without_cipher_redacted(self):
+        """
+        Test saving and loading without cipher. Secrets redacted and warning logged.
+        """
+        with patch("openhands.sdk.llm.llm_registry.logger") as mock_logger:
+            LLMRegistry.save_profile("test", self.sample_llm)
+            mock_logger.warning.assert_called_once()
+            assert "without encryption" in str(mock_logger.warning.call_args)
 
-    def test_save_profile_requires_cipher_or_expose_secrets(self):
-        """Test that saving without cipher and expose_secrets=False raises error."""
-        with pytest.raises(ValueError, match="without secrets or encryption"):
-            LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=False)
+        # Verify secrets are redacted in saved file
+        content = (Path(self.temp_dir.name) / "llm_profiles" / "test.json").read_text()
+        assert "sk-test-key-12345" not in content
+
+        # Verify loading works (secrets will be redacted)
+        loaded = LLMRegistry.load_profile("test")
+        assert loaded.model == self.sample_llm.model
 
     def test_save_profile_override_existing(self):
         """Test override_existing flag."""
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
+        LLMRegistry.save_profile("test", self.sample_llm)
 
         with pytest.raises(FileExistsError, match="already exists"):
-            LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
+            LLMRegistry.save_profile("test", self.sample_llm)
 
         new_llm = LLM(model="gpt-3.5", api_key=SecretStr("new"), usage_id="test")
-        LLMRegistry.save_profile(
-            "test", new_llm, expose_secrets=True, override_existing=True
-        )
+        LLMRegistry.save_profile("test", new_llm, override_existing=True)
         assert LLMRegistry.load_profile("test").model == "gpt-3.5"
-
-    def test_load_profile_with_cipher_decrypts(self):
-        """Test that encrypted profiles are decrypted on load."""
-        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
-
-        loaded = LLMRegistry.load_profile("test")
-        assert loaded.model == self.sample_llm.model
-        assert loaded.api_key is not None
-        assert isinstance(loaded.api_key, SecretStr)
-        assert loaded.api_key.get_secret_value() == "sk-test-key-12345"
-        assert loaded.usage_id == self.sample_llm.usage_id
-
-    def test_load_profile_without_cipher_plaintext(self):
-        """Test loading plaintext profiles."""
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
-        loaded = LLMRegistry.load_profile("test")
-        assert loaded.api_key is not None
-        assert isinstance(loaded.api_key, SecretStr)
-        assert loaded.api_key.get_secret_value() == "sk-test-key-12345"
 
     def test_load_profile_not_found(self):
         """Test loading non-existent profile raises FileNotFoundError."""
@@ -294,7 +278,7 @@ class TestLLMProfilePersistence(unittest.TestCase):
     def test_load_profile_round_trip(self):
         """Test save then load preserves all attributes."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
+        LLMRegistry.save_profile("test", self.sample_llm)
 
         loaded = LLMRegistry.load_profile("test")
         assert loaded.model == self.sample_llm.model
@@ -311,7 +295,7 @@ class TestLLMProfilePersistence(unittest.TestCase):
 
     def test_delete_profile_success(self):
         """Test successful profile deletion."""
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
+        LLMRegistry.save_profile("test", self.sample_llm)
         profile_path = Path(self.temp_dir.name) / "llm_profiles" / "test.json"
         assert profile_path.exists()
 
@@ -329,9 +313,9 @@ class TestLLMProfilePersistence(unittest.TestCase):
 
     def test_list_profiles_multiple(self):
         """Test listing multiple profiles."""
-        LLMRegistry.save_profile("p1", self.sample_llm, expose_secrets=True)
-        LLMRegistry.save_profile("p2", self.sample_llm, expose_secrets=True)
-        LLMRegistry.save_profile("p3", self.sample_llm, expose_secrets=True)
+        LLMRegistry.save_profile("p1", self.sample_llm)
+        LLMRegistry.save_profile("p2", self.sample_llm)
+        LLMRegistry.save_profile("p3", self.sample_llm)
 
         profiles = LLMRegistry.list_profiles()
         assert len(profiles) == 3
@@ -339,7 +323,7 @@ class TestLLMProfilePersistence(unittest.TestCase):
 
     def test_list_profiles_returns_names_only(self):
         """Test that list_profiles returns just names, not paths."""
-        LLMRegistry.save_profile("test", self.sample_llm, expose_secrets=True)
+        LLMRegistry.save_profile("test", self.sample_llm)
         profiles = LLMRegistry.list_profiles()
         assert profiles == ["test"]
         assert not any("/" in p or ".json" in p for p in profiles)
@@ -350,8 +334,8 @@ class TestLLMProfilePersistence(unittest.TestCase):
         llm1 = LLM(model="gpt-4o", api_key=SecretStr("key1"), usage_id="agent")
         llm2 = LLM(model="gpt-3.5", api_key=SecretStr("key2"), usage_id="condenser")
 
-        LLMRegistry.save_profile("agent", llm1, expose_secrets=True)
-        LLMRegistry.save_profile("condenser", llm2, expose_secrets=True)
+        LLMRegistry.save_profile("agent", llm1)
+        LLMRegistry.save_profile("condenser", llm2)
 
         assert len(LLMRegistry.list_profiles()) == 2
         assert LLMRegistry.load_profile("agent").model == "gpt-4o"

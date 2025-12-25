@@ -151,7 +151,6 @@ class LLMRegistry:
         cls,
         name: str,
         llm: LLM,
-        expose_secrets: bool = False,
         override_existing: bool = False,
     ) -> None:
         """
@@ -169,17 +168,12 @@ class LLMRegistry:
         context = cls._get_cipher_context()
         has_cipher = "cipher" in context
 
-        if not expose_secrets and not has_cipher:
-            raise ValueError(
-                f"Cannot save profile '{name}' without secrets or encryption. "
-                "The profile would be redacted and unusable. "
-                "Set expose_secrets=True or provide an OPENHANDS_ENCRYPTION_KEY."
-            )
-
-        # If cipher exists, it will encrypt regardless of expose_secrets
-        # expose_secrets only matters when there's no cipher
         if not has_cipher:
-            context["expose_secrets"] = expose_secrets
+            logger.warning(
+                f"Saving profile '{name}' without encryption. "
+                "Secrets will be redacted. "
+                "Set OPENHANDS_ENCRYPTION_KEY environment variable to encrypt secrets."
+            )
 
         with open(profile_path, "w") as f:
             json.dump(llm.model_dump(context=context, mode="json"), f, indent=2)

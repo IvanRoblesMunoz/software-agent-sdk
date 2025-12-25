@@ -76,9 +76,9 @@ print("DEMONSTRATING LLM PROFILES")
 print("-" * 40)
 
 # IMPORTANT:
-# When 'expose_secrets=False', the 'OPENHANDS_ENCRYPTION_KEY' MUST be set.
-# Otherwise, the profile would be redacted (masked) and unusable, and
-# save_profile() will raise a ValueError to prevent data loss.
+# If 'OPENHANDS_ENCRYPTION_KEY' is not set, secrets will be redacted (masked)
+# and the profile may be unusable. A warning will be logged.
+# Set 'OPENHANDS_ENCRYPTION_KEY' to encrypt secrets automatically.
 if not os.getenv("OPENHANDS_ENCRYPTION_KEY"):
     os.environ["OPENHANDS_ENCRYPTION_KEY"] = "demo-key-for-encrypted-profiles"
 
@@ -88,7 +88,6 @@ profile_name = "example-agent-profile"
 LLMRegistry.save_profile(
     name=profile_name,
     llm=main_llm,
-    expose_secrets=False,  # Enforce encryption/redaction logic
     override_existing=True,  # Explicitly allow overwriting
 )
 print(f"✓ Saved encrypted profile '{profile_name}' to ~/.openhands/llm_profiles/")
