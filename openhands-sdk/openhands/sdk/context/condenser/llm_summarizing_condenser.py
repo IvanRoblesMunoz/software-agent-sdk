@@ -86,4 +86,6 @@ class LLMSummarizingCondenser(RollingCondenser):
             summary=summary,
             summary_offset=self.keep_first,
             llm_response_id=llm_response.id,
+            model_name=self.llm.model,
+            usage_id=self.llm.usage_id,
         )

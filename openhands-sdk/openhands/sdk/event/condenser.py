@@ -30,6 +30,16 @@ class Condensation(Event):
             "Completion or Response ID of the LLM response that generated this event"
         ),
     )
+    model_name: str | None = Field(
+        default=None,
+        description="Name of the LLM model that generated this condensation summary",
+    )
+    usage_id: str | None = Field(
+        default=None,
+        description=(
+            "Usage ID of the LLM instance that generated this condensation summary"
+        ),
+    )
 
     source: SourceType = "environment"
 

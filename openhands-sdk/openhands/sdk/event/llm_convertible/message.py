@@ -35,6 +35,20 @@ class MessageEvent(LLMConvertibleEvent):
             "If the source != 'agent', this field is None"
         ),
     )
+    model_name: str | None = Field(
+        default=None,
+        description=(
+            "Name of the LLM model that generated this message "
+            "(e.g., 'gpt-4o', 'claude-sonnet-4'). None if source != 'agent'"
+        ),
+    )
+    usage_id: str | None = Field(
+        default=None,
+        description=(
+            "Usage ID of the LLM instance that generated this message. "
+            "None if source != 'agent'"
+        ),
+    )
 
     # context extensions stuff / skill can go here
     activated_skills: list[str] = Field(
