@@ -31,7 +31,7 @@ class LLMAuth(BaseModel):
     """Authentication profile for LLM providers."""
 
     name: str = Field(description="Unique name for this auth profile")
-    credentials: dict[str, SecretStr | None] = Field(
+    credentials: dict[str, str | SecretStr | None] = Field(
         description="Provider credentials (api_key, aws_access_key_id, etc.)"
     )
     provider: str | None = Field(
