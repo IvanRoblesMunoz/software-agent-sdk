@@ -406,13 +406,19 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
         except FileNotFoundError:
             return
 
-        if auth.status != LLMAuthStatus.CONFIGURED:
-            return
-
         # Apply credentials from auth profile
         for key, value in auth.credentials.items():
             if value is not None and hasattr(self, key):
                 setattr(self, key, value)
+
+    def _ensure_valid_credentials(self) -> None:
+        if not self.has_valid_credentials:
+            raise ValueError(
+                "LLM credentials are not configured "
+                f"(status={self.credentials_status}). "
+                "Set api_key/aws_* directly or configure auth_profile with valid "
+                "credentials."
+            )
 
     @model_validator(mode="after")
     def _set_env_side_effects(self):
@@ -482,8 +488,8 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
     # Public API
     # =========================================================================
     @property
-    def auth_status(self) -> LLMAuthStatus:
-        """Get the current authentication status.
+    def credentials_status(self) -> LLMAuthStatus:
+        """Get the current credential configuration status.
 
         Returns:
             LLMAuthStatus enum indicating how auth is configured.
@@ -505,23 +511,13 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
         return LLMAuthStatus.MISSING
 
     @property
-    def auth_has_valid_credentials(self) -> bool:
+    def has_valid_credentials(self) -> bool:
         """Check if LLM has valid credentials configured."""
 
-        return self.auth_status in (
+        return self.credentials_status in (
             LLMAuthStatus.CONFIGURED,
             LLMAuthStatus.DIRECT,
         )
-
-    def check_auth_status(self) -> LLMAuthStatus:
-        """Check the current authentication status.
-
-        Deprecated: Use the `auth_status` property instead.
-
-        Returns:
-            LLMAuthStatus enum indicating how auth is configured.
-        """
-        return self.auth_status
 
     @property
     def metrics(self) -> Metrics:
@@ -591,6 +587,8 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
             kwargs["stream"] = True
 
         self._refresh_auth_profile()
+
+        self._ensure_valid_credentials()
 
         # 1) serialize messages
         formatted_messages = self.format_messages_for_llm(messages)
@@ -727,6 +725,8 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
             raise ValueError("Streaming is not supported for Responses API yet")
 
         self._refresh_auth_profile()
+
+        self._ensure_valid_credentials()
 
         # Build instructions + input list using dedicated Responses formatter
         instructions, input_items = self.format_messages_for_responses(messages)

@@ -60,3 +60,8 @@ class LLMAuth(BaseModel):
             return LLMAuthStatus.CORRUPTED
 
         return LLMAuthStatus.CONFIGURED
+
+    @property
+    def has_valid_credentials(self) -> bool:
+        """Check if auth profile has valid credentials."""
+        return self.status == LLMAuthStatus.CONFIGURED
