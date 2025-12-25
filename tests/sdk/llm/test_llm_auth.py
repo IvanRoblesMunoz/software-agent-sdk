@@ -6,6 +6,11 @@ from pydantic import SecretStr
 from openhands.sdk.llm.llm_auth import LLMAuth, LLMAuthStatus
 
 
+@pytest.fixture(autouse=True)
+def _clear_llm_auth_env(monkeypatch):
+    monkeypatch.delenv("OPENHANDS_ENCRYPTION_KEY", raising=False)
+
+
 @pytest.mark.parametrize(
     "name,credentials,expected_status,expected_has_valid_credentials",
     [

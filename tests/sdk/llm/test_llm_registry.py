@@ -7,11 +7,16 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
+from openai.types.responses.response_output_message import ResponseOutputMessage
+from openai.types.responses.response_output_text import ResponseOutputText
 from pydantic import SecretStr
 
 from openhands.sdk.llm.llm import LLM
 from openhands.sdk.llm.llm_auth import LLMAuth, LLMAuthStatus
 from openhands.sdk.llm.llm_registry import LLMRegistry, RegistryEvent
+from openhands.sdk.llm.message import Message, TextContent
+from tests.conftest import create_mock_litellm_response
 
 
 class TestLLMRegistry(unittest.TestCase):
@@ -211,6 +216,7 @@ class TestLLMProfilePersistence:
         temp_dir = tempfile.TemporaryDirectory()
         original_llm_profiles_method = LLMRegistry._get_profiles_dir
         original_registry_profiles_method = LLMRegistry._get_registry_profiles_dir
+        original_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
 
         def mock_get_profiles_dir():
             path = Path(temp_dir.name) / "llm_profiles"
@@ -238,14 +244,18 @@ class TestLLMProfilePersistence:
         self.temp_dir = temp_dir
         self.sample_llm = sample_llm
 
+        os.environ.pop("OPENHANDS_ENCRYPTION_KEY", None)
+
         yield
 
         # Cleanup
         LLMRegistry._get_profiles_dir = original_llm_profiles_method
         LLMRegistry._get_registry_profiles_dir = original_registry_profiles_method
         temp_dir.cleanup()
-        if "OPENHANDS_ENCRYPTION_KEY" in os.environ:
-            del os.environ["OPENHANDS_ENCRYPTION_KEY"]
+        if original_key is None:
+            os.environ.pop("OPENHANDS_ENCRYPTION_KEY", None)
+        else:
+            os.environ["OPENHANDS_ENCRYPTION_KEY"] = original_key
 
     def test_save_llm_profile_with_cipher_encrypts(self):
         """Test that profiles are encrypted when OPENHANDS_ENCRYPTION_KEY is set."""
@@ -547,6 +557,7 @@ class TestLLMAuthProfilePersistence:
         """Set up test environment before each test."""
         temp_dir = tempfile.TemporaryDirectory()
         original_method = LLMRegistry._get_auth_profiles_dir
+        original_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
 
         def mock_get_auth_profiles_dir():
             path = Path(temp_dir.name) / "auth_profiles"
@@ -562,12 +573,16 @@ class TestLLMAuthProfilePersistence:
         self.temp_dir = temp_dir
         self.sample_auth = sample_auth
 
+        os.environ.pop("OPENHANDS_ENCRYPTION_KEY", None)
+
         yield
 
         LLMRegistry._get_auth_profiles_dir = original_method
         temp_dir.cleanup()
-        if "OPENHANDS_ENCRYPTION_KEY" in os.environ:
-            del os.environ["OPENHANDS_ENCRYPTION_KEY"]
+        if original_key is None:
+            os.environ.pop("OPENHANDS_ENCRYPTION_KEY", None)
+        else:
+            os.environ["OPENHANDS_ENCRYPTION_KEY"] = original_key
 
     def test_save_auth_profile_with_cipher_redacts_secret(self):
         """Test that auth profiles do not store secrets in plaintext."""
@@ -603,8 +618,10 @@ class TestLLMAuthProfilePersistence:
             name="test",
             credentials={"api_key": SecretStr("new")},
         )
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
         LLMRegistry.save_auth_profile(new_auth, override_existing=True)
-        assert LLMRegistry.load_auth_profile("test").credentials["api_key"] is not None
+        loaded = LLMRegistry.load_auth_profile("test")
+        assert loaded.credentials["api_key"] is not None
 
     def test_load_auth_profile_not_found(self):
         """Test loading non-existent profile raises FileNotFoundError."""
@@ -679,3 +696,77 @@ class TestLLMAuthProfilePersistence:
 
         assert missing_profiles == ["missing"]
         assert corrupted_profiles == ["corrupted"]
+
+
+class TestLLMAuthProfileEndToEnd:
+    """End-to-end test for auth profiles applied to LLM instances."""
+
+    @pytest.fixture(autouse=True)
+    def setup_auth_profile_e2e(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        original_method = LLMRegistry._get_auth_profiles_dir
+        original_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
+
+        def mock_get_auth_profiles_dir():
+            path = Path(temp_dir.name) / "auth_profiles"
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+
+        LLMRegistry._get_auth_profiles_dir = staticmethod(mock_get_auth_profiles_dir)
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+
+        yield
+
+        LLMRegistry._get_auth_profiles_dir = original_method
+        temp_dir.cleanup()
+        if original_key is None:
+            os.environ.pop("OPENHANDS_ENCRYPTION_KEY", None)
+        else:
+            os.environ["OPENHANDS_ENCRYPTION_KEY"] = original_key
+
+    @pytest.mark.parametrize("method_name", ["completion", "responses"])
+    def test_llm_loads_auth_profile_credentials(self, method_name):
+        auth = LLMAuth(name="e2e", credentials={"api_key": SecretStr("sk-e2e")})
+        LLMRegistry.save_auth_profile(auth, override_existing=True)
+
+        llm = LLM(model="openai/gpt-4o", usage_id="e2e", auth_profile="e2e")
+        messages = [Message(role="user", content=[TextContent(text="Hi")])]
+
+        if method_name == "completion":
+            with patch("openhands.sdk.llm.llm.litellm_completion") as mock_completion:
+                mock_completion.return_value = create_mock_litellm_response("ok")
+                llm.completion(messages=messages)
+        else:
+            msg = ResponseOutputMessage.model_construct(
+                id="m1",
+                type="message",
+                role="assistant",
+                status="completed",
+                content=[
+                    ResponseOutputText(
+                        type="output_text",
+                        text="ok",
+                        annotations=[],
+                    )
+                ],
+            )
+            usage = ResponseAPIUsage(input_tokens=0, output_tokens=0, total_tokens=0)
+            resp = ResponsesAPIResponse(
+                id="resp123",
+                created_at=0,
+                output=[msg],
+                usage=usage,
+                parallel_tool_calls=False,
+                tool_choice="auto",
+                top_p=None,
+                tools=[],
+                instructions="",
+                status="completed",
+            )
+            with patch("openhands.sdk.llm.llm.litellm_responses") as mock_responses:
+                mock_responses.return_value = resp
+                llm.responses(messages=messages)
+
+        assert llm.api_key is not None
+        assert isinstance(llm.api_key, SecretStr)
+        assert llm.api_key.get_secret_value() == "sk-e2e"

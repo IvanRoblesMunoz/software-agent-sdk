@@ -1,8 +1,8 @@
 from enum import Enum
 
-from pydantic import BaseModel, Field, SecretStr, field_validator
+from pydantic import BaseModel, Field, SecretStr, field_serializer, field_validator
 
-from openhands.sdk.utils.pydantic_secrets import validate_secret
+from openhands.sdk.utils.pydantic_secrets import serialize_secret, validate_secret
 
 
 class LLMAuthStatus(str, Enum):
@@ -44,6 +44,13 @@ class LLMAuth(BaseModel):
         result = {}
         for key, value in v.items():
             result[key] = validate_secret(value, info)
+        return result
+
+    @field_serializer("credentials", when_used="always")
+    def _serialize_credentials(self, v: dict[str, SecretStr | None], info):
+        result: dict[str, str | SecretStr | None] = {}
+        for key, value in v.items():
+            result[key] = serialize_secret(value, info)
         return result
 
     @field_validator("name")
