@@ -9,6 +9,8 @@ from openhands.sdk import (
     Event,
     LLMConvertibleEvent,
     LLMRegistry,
+    Message,
+    TextContent,
     get_logger,
 )
 from openhands.sdk.tool import Tool
@@ -68,45 +70,21 @@ for i, message in enumerate(llm_messages):
 print("=" * 100)
 print(f"LLM Registry usage IDs: {llm_registry.list_usage_ids()}")
 
-# ============================================================================
-# LLM Profile Persistence
-# ============================================================================
-print("\n" + "-" * 40)
-print("DEMONSTRATING LLM PROFILES")
-print("-" * 40)
+# Demonstrate getting the same LLM instance from registry
+same_llm = llm_registry.get("agent")
+print(f"Same LLM instance: {llm is same_llm}")
 
-# IMPORTANT:
-# If 'OPENHANDS_ENCRYPTION_KEY' is not set, secrets will be redacted (masked)
-# and the profile may be unusable. A warning will be logged.
-# Set 'OPENHANDS_ENCRYPTION_KEY' to encrypt secrets automatically.
-if not os.getenv("OPENHANDS_ENCRYPTION_KEY"):
-    os.environ["OPENHANDS_ENCRYPTION_KEY"] = "demo-key-for-encrypted-profiles"
-
-profile_name = "example-agent-profile"
-
-# 1. Save profile (Automatically encrypted because key is set)
-LLMRegistry.save_profile(
-    name=profile_name,
-    llm=main_llm,
-    override_existing=True,  # Explicitly allow overwriting
+# Demonstrate requesting a completion directly from an LLM
+resp = llm.completion(
+    messages=[
+        Message(role="user", content=[TextContent(text="Say hello in one word.")])
+    ]
 )
-print(f"✓ Saved encrypted profile '{profile_name}' to ~/.openhands/llm_profiles/")
-
-# 2. List all available profiles
-print(f"✓ Available profiles: {LLMRegistry.list_profiles()}")
-
-# 3. Load profile back into an LLM (Decryption is automatic if key is set)
-loaded_llm = LLMRegistry.load_profile(profile_name)
-print(f"✓ Loaded: {loaded_llm.model} (Usage: {loaded_llm.usage_id})")
-
-# 4. Use the loaded configuration for a new agent
-new_agent = Agent(llm=loaded_llm)
-print("✓ Created new agent from loaded configuration.")
-
-# 5. Cleanup
-LLMRegistry.delete_profile(profile_name)
-print(f"✓ Deleted profile '{profile_name}'")
+# Access the response content via OpenHands LLMResponse
+msg = resp.message
+texts = [c.text for c in msg.content if isinstance(c, TextContent)]
+print(f"Direct completion response: {texts[0] if texts else str(msg)}")
 
 # Report cost
 cost = llm.metrics.accumulated_cost
-print(f"\nEXAMPLE_COST: {cost}")
+print(f"EXAMPLE_COST: {cost}")
