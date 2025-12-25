@@ -44,9 +44,6 @@ class LLMAuth(BaseModel):
         cls, v: dict[str, str | SecretStr | None], info
     ) -> dict[str, SecretStr | None]:
         """Auto-coerce plain strings to SecretStr, decrypting when possible."""
-        if not isinstance(v, dict):
-            raise ValueError("credentials must be a dictionary")
-
         result = {}
         for key, value in v.items():
             if value is None or isinstance(value, (str, SecretStr)):
