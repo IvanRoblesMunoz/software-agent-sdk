@@ -38,6 +38,9 @@ class LLMRegistry:
     registry_id: str
     retry_listener: Callable[[int, int], None] | None
 
+    # =========================================================================
+    # Public API
+    # =========================================================================
     def __init__(
         self,
         retry_listener: Callable[[int, int], None] | None = None,
@@ -148,6 +151,9 @@ class LLMRegistry:
             llm = self.load_llm_profile(profile_name, usage_id=usage_id)
             self.add(llm)
 
+    # =========================================================================
+    # LLM profile helpers
+    # =========================================================================
     @staticmethod
     def _get_profiles_dir() -> Path:
         """Get the standard directory for LLM profiles."""
@@ -359,7 +365,7 @@ class LLMRegistry:
         logger.info(f"Deleted registry profile '{name}'")
 
     # =========================================================================
-    # Auth profile management
+    # Auth profile helpers
     # =========================================================================
     @staticmethod
     def _get_auth_profiles_dir() -> Path:

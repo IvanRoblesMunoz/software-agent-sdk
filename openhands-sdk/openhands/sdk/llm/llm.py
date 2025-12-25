@@ -489,11 +489,7 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
     # =========================================================================
     @property
     def credentials_status(self) -> LLMAuthStatus:
-        """Get the current credential configuration status.
-
-        Returns:
-            LLMAuthStatus enum indicating how auth is configured.
-        """
+        """Get the current credential configuration status"""
         from openhands.sdk.llm.llm_registry import LLMRegistry
 
         if self.auth_profile:
@@ -586,8 +582,8 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
                 raise ValueError("Streaming requires an on_token callback")
             kwargs["stream"] = True
 
+        # Refresh at runtime to ensure sync with saved llm auth profiles
         self._refresh_auth_profile()
-
         self._ensure_valid_credentials()
 
         # 1) serialize messages
@@ -724,8 +720,8 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
         if kwargs.get("stream", False) or self.stream or on_token is not None:
             raise ValueError("Streaming is not supported for Responses API yet")
 
+        # Refresh at runtime to ensure sync with saved llm auth profiles
         self._refresh_auth_profile()
-
         self._ensure_valid_credentials()
 
         # Build instructions + input list using dedicated Responses formatter
