@@ -57,6 +57,12 @@ class CondenserBase(DiscriminatedUnionMixin, ABC):
         """
         return False
 
+    def resolve_diff_from_deserialized(
+        self, persisted: "CondenserBase"
+    ) -> "CondenserBase":
+        """Return persisted condenser. Subclasses override to reconcile LLMs."""
+        return persisted
+
 
 class PipelinableCondenserBase(CondenserBase):
     """Abstract condenser interface which may be pipelined. (Since a pipeline

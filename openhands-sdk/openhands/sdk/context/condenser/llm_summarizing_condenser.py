@@ -1,4 +1,5 @@
 import os
+from typing import Self
 
 from pydantic import Field, model_validator
 
@@ -28,6 +29,11 @@ class LLMSummarizingCondenser(RollingCondenser):
 
     def handles_condensation_requests(self) -> bool:
         return True
+
+    def resolve_diff_from_deserialized(self, persisted: Self) -> Self:  # type: ignore[override]
+        """Reconcile LLM, keep persisted settings."""
+        new_llm = self.llm.resolve_diff_from_deserialized(persisted.llm)
+        return persisted.model_copy(update={"llm": new_llm})
 
     def should_condense(self, view: View) -> bool:
         if view.unhandled_condensation_request:
