@@ -2,6 +2,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
+from openhands.sdk.utils.pydantic_secrets import validate_secret
+
 
 class LLMAuthStatus(str, Enum):
     """
@@ -29,7 +31,7 @@ class LLMAuth(BaseModel):
     """Authentication profile for LLM providers."""
 
     name: str = Field(description="Unique name for this auth profile")
-    credentials: dict[str, SecretStr] = Field(
+    credentials: dict[str, SecretStr | None] = Field(
         description="Provider credentials (api_key, aws_access_key_id, etc.)"
     )
     provider: str | None = Field(
@@ -38,17 +40,17 @@ class LLMAuth(BaseModel):
 
     @field_validator("credentials", mode="before")
     @classmethod
-    def coerce_credentials(cls, v: dict[str, str | SecretStr]) -> dict[str, SecretStr]:
-        """Auto-coerce plain strings to SecretStr."""
+    def coerce_credentials(
+        cls, v: dict[str, str | SecretStr | None], info
+    ) -> dict[str, SecretStr | None]:
+        """Auto-coerce plain strings to SecretStr, decrypting when possible."""
         if not isinstance(v, dict):
             raise ValueError("credentials must be a dictionary")
 
         result = {}
         for key, value in v.items():
-            if isinstance(value, SecretStr):
-                result[key] = value
-            elif isinstance(value, str):
-                result[key] = SecretStr(value)
+            if value is None or isinstance(value, (str, SecretStr)):
+                result[key] = validate_secret(value, info)
             else:
                 raise ValueError(
                     f"Credential '{key}' must be a string or SecretStr, "
@@ -67,18 +69,3 @@ class LLMAuth(BaseModel):
             return LLMAuthStatus.CORRUPTED
 
         return LLMAuthStatus.CONFIGURED
-
-    @property
-    def is_configured(self) -> bool:
-        """Check if auth profile has valid credentials."""
-        return self.status == LLMAuthStatus.CONFIGURED
-
-    @property
-    def is_corrupted(self) -> bool:
-        """Check if auth profile has corrupted credentials."""
-        return self.status == LLMAuthStatus.CORRUPTED
-
-    @property
-    def is_missing(self) -> bool:
-        """Check if auth profile has no credentials."""
-        return self.status == LLMAuthStatus.MISSING
