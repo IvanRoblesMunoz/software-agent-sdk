@@ -46,13 +46,7 @@ class LLMAuth(BaseModel):
         """Auto-coerce plain strings to SecretStr, decrypting when possible."""
         result = {}
         for key, value in v.items():
-            if value is None or isinstance(value, (str, SecretStr)):
-                result[key] = validate_secret(value, info)
-            else:
-                raise ValueError(
-                    f"Credential '{key}' must be a string or SecretStr, "
-                    f"got {type(value)}"
-                )
+            result[key] = validate_secret(value, info)
         return result
 
     @property
