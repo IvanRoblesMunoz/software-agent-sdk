@@ -10,6 +10,7 @@ import pytest
 from pydantic import SecretStr
 
 from openhands.sdk.llm.llm import LLM
+from openhands.sdk.llm.llm_auth import LLMAuth, LLMAuthStatus
 from openhands.sdk.llm.llm_registry import LLMRegistry, RegistryEvent
 
 
@@ -536,3 +537,126 @@ class TestLLMProfilePersistence:
 
         assert registry.get("code-gen").model == "claude-3"
         assert registry.get("code-gen").usage_id == "code-gen"
+
+
+class TestLLMAuthProfilePersistence:
+    """Tests for auth profile save/load/delete functionality."""
+
+    @pytest.fixture(autouse=True)
+    def setup_auth_profile_persistence(self):
+        """Set up test environment before each test."""
+        temp_dir = tempfile.TemporaryDirectory()
+        original_method = LLMRegistry._get_auth_profiles_dir
+
+        def mock_get_auth_profiles_dir():
+            path = Path(temp_dir.name) / "auth_profiles"
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+
+        LLMRegistry._get_auth_profiles_dir = staticmethod(mock_get_auth_profiles_dir)
+        sample_auth = LLMAuth(
+            name="test-auth",
+            provider="openai",
+            credentials={"api_key": SecretStr("sk-test-auth-12345")},
+        )
+
+        self.temp_dir = temp_dir
+        self.sample_auth = sample_auth
+
+        yield
+
+        LLMRegistry._get_auth_profiles_dir = original_method
+        temp_dir.cleanup()
+        if "OPENHANDS_ENCRYPTION_KEY" in os.environ:
+            del os.environ["OPENHANDS_ENCRYPTION_KEY"]
+
+    def test_save_auth_profile_with_cipher_redacts_secret(self):
+        """Test that auth profiles do not store secrets in plaintext."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+        LLMRegistry.save_auth_profile("test", self.sample_auth)
+
+        content = (Path(self.temp_dir.name) / "auth_profiles" / "test.json").read_text()
+        assert "sk-test-auth-12345" not in content
+        assert '"api_key":' in content
+
+    def test_save_auth_profile_without_cipher_warns_and_redacts(self):
+        """Test saving without cipher warns and secrets are redacted."""
+        with patch("openhands.sdk.llm.llm_registry.logger") as mock_logger:
+            LLMRegistry.save_auth_profile("test", self.sample_auth)
+            mock_logger.warning.assert_called_once()
+            assert "without encryption" in str(mock_logger.warning.call_args)
+
+        content = (Path(self.temp_dir.name) / "auth_profiles" / "test.json").read_text()
+        assert "sk-test-auth-12345" not in content
+
+        loaded = LLMRegistry.load_auth_profile("test")
+        assert loaded.name == self.sample_auth.name
+        assert loaded.provider == self.sample_auth.provider
+        assert loaded.status == LLMAuthStatus.CORRUPTED
+
+    def test_save_auth_profile_override_existing(self):
+        """Test override_existing flag."""
+        LLMRegistry.save_auth_profile("test", self.sample_auth)
+
+        with pytest.raises(FileExistsError, match="already exists"):
+            LLMRegistry.save_auth_profile("test", self.sample_auth)
+
+        new_auth = LLMAuth(
+            name="other",
+            provider="openai",
+            credentials={"api_key": SecretStr("new")},
+        )
+        LLMRegistry.save_auth_profile("test", new_auth, override_existing=True)
+        assert LLMRegistry.load_auth_profile("test").name == "other"
+
+    def test_load_auth_profile_not_found(self):
+        """Test loading non-existent profile raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError, match="not found"):
+            LLMRegistry.load_auth_profile("missing")
+
+    def test_delete_auth_profile_success(self):
+        """Test successful profile deletion."""
+        LLMRegistry.save_auth_profile("test", self.sample_auth)
+        profile_path = Path(self.temp_dir.name) / "auth_profiles" / "test.json"
+        assert profile_path.exists()
+
+        LLMRegistry.delete_auth_profile("test")
+        assert not profile_path.exists()
+
+    def test_delete_auth_profile_not_found(self):
+        """Test deleting non-existent profile raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError, match="not found"):
+            LLMRegistry.delete_auth_profile("missing")
+
+    def test_list_auth_profiles_empty(self):
+        """Test listing when no profiles exist."""
+        assert LLMRegistry.list_auth_profiles() == []
+
+    def test_list_auth_profiles_multiple(self):
+        """Test listing multiple profiles."""
+        LLMRegistry.save_auth_profile("p1", self.sample_auth)
+        LLMRegistry.save_auth_profile("p2", self.sample_auth)
+        LLMRegistry.save_auth_profile("p3", self.sample_auth)
+
+        profiles = LLMRegistry.list_auth_profiles()
+        assert len(profiles) == 3
+        assert set(profiles) == {"p1", "p2", "p3"}
+
+    def test_list_auth_profiles_returns_names_only(self):
+        """Test that list_auth_profiles returns just names, not paths."""
+        LLMRegistry.save_auth_profile("test", self.sample_auth)
+        profiles = LLMRegistry.list_auth_profiles()
+        assert profiles == ["test"]
+        assert not any("/" in p or ".json" in p for p in profiles)
+
+    def test_list_auth_profiles_filtered_by_status(self):
+        """Test filtering auth profiles by status."""
+        missing_auth = LLMAuth(name="missing", credentials={})
+        LLMRegistry.save_auth_profile("missing", missing_auth)
+        LLMRegistry.save_auth_profile("corrupted", self.sample_auth)
+
+        missing_profiles = LLMRegistry.list_auth_profiles(LLMAuthStatus.MISSING)
+        corrupted_profiles = LLMRegistry.list_auth_profiles(LLMAuthStatus.CORRUPTED)
+
+        assert missing_profiles == ["missing"]
+        assert corrupted_profiles == ["corrupted"]

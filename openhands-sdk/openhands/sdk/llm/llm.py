@@ -411,15 +411,6 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
             if value is not None and hasattr(self, key):
                 setattr(self, key, value)
 
-    def _ensure_valid_credentials(self) -> None:
-        if not self.has_valid_credentials:
-            raise ValueError(
-                "LLM credentials are not configured "
-                f"(status={self.credentials_status}). "
-                "Set api_key/aws_* directly or configure auth_profile with valid "
-                "credentials."
-            )
-
     @model_validator(mode="after")
     def _set_env_side_effects(self):
         if self.openrouter_site_url:
@@ -584,8 +575,6 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
 
         # Refresh at runtime to ensure sync with saved llm auth profiles
         self._refresh_auth_profile()
-        self._ensure_valid_credentials()
-
         # 1) serialize messages
         formatted_messages = self.format_messages_for_llm(messages)
 
@@ -722,8 +711,6 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
 
         # Refresh at runtime to ensure sync with saved llm auth profiles
         self._refresh_auth_profile()
-        self._ensure_valid_credentials()
-
         # Build instructions + input list using dedicated Responses formatter
         instructions, input_items = self.format_messages_for_responses(messages)
 
