@@ -1,5 +1,3 @@
-"""Auth profile management for LLMs."""
-
 from enum import Enum
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
