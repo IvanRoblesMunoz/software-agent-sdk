@@ -407,14 +407,12 @@ class LLMRegistry:
         return filtered
 
     @classmethod
-    def save_auth_profile(
-        cls, name: str, auth: LLMAuth, override_existing: bool = False
-    ) -> None:
+    def save_auth_profile(cls, auth: LLMAuth, override_existing: bool = False) -> None:
         """Save an auth profile.
 
         Secrets are automatically encrypted if OPENHANDS_ENCRYPTION_KEY is set.
         """
-        cls._validate_profile_name(name)
+        name = auth.name
         profile_path = cls._get_auth_profile_path(name)
         if profile_path.exists() and not override_existing:
             raise FileExistsError(

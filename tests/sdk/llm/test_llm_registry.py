@@ -555,8 +555,7 @@ class TestLLMAuthProfilePersistence:
 
         LLMRegistry._get_auth_profiles_dir = staticmethod(mock_get_auth_profiles_dir)
         sample_auth = LLMAuth(
-            name="test-auth",
-            provider="openai",
+            name="test",
             credentials={"api_key": SecretStr("sk-test-auth-12345")},
         )
 
@@ -573,7 +572,7 @@ class TestLLMAuthProfilePersistence:
     def test_save_auth_profile_with_cipher_redacts_secret(self):
         """Test that auth profiles do not store secrets in plaintext."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        LLMRegistry.save_auth_profile("test", self.sample_auth)
+        LLMRegistry.save_auth_profile(self.sample_auth)
 
         content = (Path(self.temp_dir.name) / "auth_profiles" / "test.json").read_text()
         assert "sk-test-auth-12345" not in content
@@ -582,7 +581,7 @@ class TestLLMAuthProfilePersistence:
     def test_save_auth_profile_without_cipher_warns_and_redacts(self):
         """Test saving without cipher warns and secrets are redacted."""
         with patch("openhands.sdk.llm.llm_registry.logger") as mock_logger:
-            LLMRegistry.save_auth_profile("test", self.sample_auth)
+            LLMRegistry.save_auth_profile(self.sample_auth)
             mock_logger.warning.assert_called_once()
             assert "without encryption" in str(mock_logger.warning.call_args)
 
@@ -591,23 +590,21 @@ class TestLLMAuthProfilePersistence:
 
         loaded = LLMRegistry.load_auth_profile("test")
         assert loaded.name == self.sample_auth.name
-        assert loaded.provider == self.sample_auth.provider
         assert loaded.status == LLMAuthStatus.CORRUPTED
 
     def test_save_auth_profile_override_existing(self):
         """Test override_existing flag."""
-        LLMRegistry.save_auth_profile("test", self.sample_auth)
+        LLMRegistry.save_auth_profile(self.sample_auth)
 
         with pytest.raises(FileExistsError, match="already exists"):
-            LLMRegistry.save_auth_profile("test", self.sample_auth)
+            LLMRegistry.save_auth_profile(self.sample_auth)
 
         new_auth = LLMAuth(
-            name="other",
-            provider="openai",
+            name="test",
             credentials={"api_key": SecretStr("new")},
         )
-        LLMRegistry.save_auth_profile("test", new_auth, override_existing=True)
-        assert LLMRegistry.load_auth_profile("test").name == "other"
+        LLMRegistry.save_auth_profile(new_auth, override_existing=True)
+        assert LLMRegistry.load_auth_profile("test").credentials["api_key"] is not None
 
     def test_load_auth_profile_not_found(self):
         """Test loading non-existent profile raises FileNotFoundError."""
@@ -616,7 +613,7 @@ class TestLLMAuthProfilePersistence:
 
     def test_delete_auth_profile_success(self):
         """Test successful profile deletion."""
-        LLMRegistry.save_auth_profile("test", self.sample_auth)
+        LLMRegistry.save_auth_profile(self.sample_auth)
         profile_path = Path(self.temp_dir.name) / "auth_profiles" / "test.json"
         assert profile_path.exists()
 
@@ -634,9 +631,27 @@ class TestLLMAuthProfilePersistence:
 
     def test_list_auth_profiles_multiple(self):
         """Test listing multiple profiles."""
-        LLMRegistry.save_auth_profile("p1", self.sample_auth)
-        LLMRegistry.save_auth_profile("p2", self.sample_auth)
-        LLMRegistry.save_auth_profile("p3", self.sample_auth)
+        LLMRegistry.save_auth_profile(
+            LLMAuth(
+                name="p1",
+                credentials=self.sample_auth.credentials,
+            ),
+            override_existing=True,
+        )
+        LLMRegistry.save_auth_profile(
+            LLMAuth(
+                name="p2",
+                credentials=self.sample_auth.credentials,
+            ),
+            override_existing=True,
+        )
+        LLMRegistry.save_auth_profile(
+            LLMAuth(
+                name="p3",
+                credentials=self.sample_auth.credentials,
+            ),
+            override_existing=True,
+        )
 
         profiles = LLMRegistry.list_auth_profiles()
         assert len(profiles) == 3
@@ -644,7 +659,7 @@ class TestLLMAuthProfilePersistence:
 
     def test_list_auth_profiles_returns_names_only(self):
         """Test that list_auth_profiles returns just names, not paths."""
-        LLMRegistry.save_auth_profile("test", self.sample_auth)
+        LLMRegistry.save_auth_profile(self.sample_auth)
         profiles = LLMRegistry.list_auth_profiles()
         assert profiles == ["test"]
         assert not any("/" in p or ".json" in p for p in profiles)
@@ -652,8 +667,12 @@ class TestLLMAuthProfilePersistence:
     def test_list_auth_profiles_filtered_by_status(self):
         """Test filtering auth profiles by status."""
         missing_auth = LLMAuth(name="missing", credentials={})
-        LLMRegistry.save_auth_profile("missing", missing_auth)
-        LLMRegistry.save_auth_profile("corrupted", self.sample_auth)
+        corrupted_auth = LLMAuth(
+            name="corrupted",
+            credentials=self.sample_auth.credentials,
+        )
+        LLMRegistry.save_auth_profile(missing_auth, override_existing=True)
+        LLMRegistry.save_auth_profile(corrupted_auth, override_existing=True)
 
         missing_profiles = LLMRegistry.list_auth_profiles(LLMAuthStatus.MISSING)
         corrupted_profiles = LLMRegistry.list_auth_profiles(LLMAuthStatus.CORRUPTED)

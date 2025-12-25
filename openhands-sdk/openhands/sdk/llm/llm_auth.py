@@ -34,9 +34,6 @@ class LLMAuth(BaseModel):
     credentials: dict[str, str | SecretStr | None] = Field(
         description="Provider credentials (api_key, aws_access_key_id, etc.)"
     )
-    provider: str | None = Field(
-        default=None, description="Optional provider hint (e.g., 'openai', 'aws')"
-    )
 
     @field_validator("credentials", mode="before")
     @classmethod
@@ -48,6 +45,14 @@ class LLMAuth(BaseModel):
         for key, value in v.items():
             result[key] = validate_secret(value, info)
         return result
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        """Validate auth profile names using registry rules."""
+        from openhands.sdk.llm.llm_registry import LLMRegistry
+
+        return LLMRegistry._validate_profile_name(v)
 
     @property
     def status(self) -> LLMAuthStatus:

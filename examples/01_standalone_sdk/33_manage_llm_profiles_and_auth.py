@@ -52,10 +52,9 @@ print(
 auth_profile_name = "my-claude-auth"
 auth_profile = LLMAuth(
     name=auth_profile_name,
-    provider="anthropic",
     credentials={"api_key": SecretStr(api_key)},
 )
-LLMRegistry.save_auth_profile(auth_profile_name, auth_profile, override_existing=True)
+LLMRegistry.save_auth_profile(auth_profile, override_existing=True)
 print(
     f"✓ Saved encrypted auth profile '{auth_profile_name}' "
     "to ~/.openhands/auth_profiles/"
