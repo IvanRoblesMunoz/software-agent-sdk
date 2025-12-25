@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, ClassVar
@@ -13,6 +14,8 @@ from openhands.sdk.utils.pydantic_secrets import Cipher
 
 
 logger = get_logger(__name__)
+
+_VALID_LLM_PROFILE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class RegistryEvent(BaseModel):
@@ -137,6 +140,23 @@ class LLMRegistry:
         return cls._get_profiles_dir() / f"{name}.json"
 
     @staticmethod
+    def _validate_profile_name(name: str) -> str:
+        """Ensure profile name is safe for filesystem use."""
+        if not name or name in {".", ".."}:
+            raise ValueError("Profile name cannot be '.', '..', or empty")
+
+        if Path(name).name != name:
+            raise ValueError("Profile name cannot contain path separators")
+
+        if not _VALID_LLM_PROFILE_NAME_PATTERN.fullmatch(name):
+            raise ValueError(
+                "Profile name must contain only alphanumerics, dots, "
+                "underscores, or hyphens"
+            )
+
+        return name
+
+    @staticmethod
     def _get_cipher_context() -> dict[str, Any]:
         enc_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
         return {"cipher": Cipher(enc_key)} if enc_key else {}
@@ -158,6 +178,7 @@ class LLMRegistry:
 
         Secrets are automatically encrypted if OPENHANDS_ENCRYPTION_KEY is set.
         """
+        cls._validate_profile_name(name)
         profile_path = cls._get_profile_path(name)
         if profile_path.exists() and not override_existing:
             raise FileExistsError(

@@ -200,32 +200,38 @@ def test_llm_registry_add_get_workflow():
         assert llm2.usage_id == "service2"
 
 
-class TestLLMProfilePersistence(unittest.TestCase):
+class TestLLMProfilePersistence:
     """Tests for LLM profile save/load/delete functionality."""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    def setup_profile_persistence(self):
         """Set up test environment before each test."""
         # Create temporary directory and patch profiles directory
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.original_method = LLMRegistry._get_profiles_dir
+        temp_dir = tempfile.TemporaryDirectory()
+        original_method = LLMRegistry._get_profiles_dir
 
         def mock_get_profiles_dir():
-            path = Path(self.temp_dir.name) / "llm_profiles"
+            path = Path(temp_dir.name) / "llm_profiles"
             path.mkdir(parents=True, exist_ok=True)
             return path
 
         LLMRegistry._get_profiles_dir = staticmethod(mock_get_profiles_dir)
-        self.sample_llm = LLM(
+        sample_llm = LLM(
             model="openai/gpt-4o",
             api_key=SecretStr("sk-test-key-12345"),
             usage_id="test-agent",
             temperature=0.7,
         )
 
-    def tearDown(self):
-        """Clean up after each test."""
-        LLMRegistry._get_profiles_dir = self.original_method
-        self.temp_dir.cleanup()
+        # Store in instance for test methods to access
+        self.temp_dir = temp_dir
+        self.sample_llm = sample_llm
+
+        yield
+
+        # Cleanup
+        LLMRegistry._get_profiles_dir = original_method
+        temp_dir.cleanup()
         if "OPENHANDS_ENCRYPTION_KEY" in os.environ:
             del os.environ["OPENHANDS_ENCRYPTION_KEY"]
 
@@ -344,3 +350,32 @@ class TestLLMProfilePersistence(unittest.TestCase):
         LLMRegistry.delete_profile("agent")
         assert len(LLMRegistry.list_profiles()) == 1
         assert "agent" not in LLMRegistry.list_profiles()
+
+    @pytest.mark.parametrize(
+        "name,should_raise,error_match",
+        [
+            # Invalid names
+            ("", True, "cannot be.*empty"),
+            (".", True, "cannot be"),
+            ("..", True, "cannot be"),
+            ("test/profile", True, "path separators"),
+            ("../test", True, "path separators"),
+            ("test@profile", True, "alphanumerics"),
+            ("test profile", True, "alphanumerics"),
+            # Valid names
+            ("test", False, None),
+            ("test-profile", False, None),
+            ("test_profile", False, None),
+            ("test.profile", False, None),
+            ("test123", False, None),
+            ("Test123_Profile-Name", False, None),
+        ],
+    )
+    def test_validate_profile_name(self, name, should_raise, error_match):
+        """Test profile name validation."""
+        if should_raise:
+            with pytest.raises(ValueError, match=error_match):
+                LLMRegistry.save_profile(name, self.sample_llm)
+        else:
+            LLMRegistry.save_profile(name, self.sample_llm, override_existing=True)
+            assert name in LLMRegistry.list_profiles()
