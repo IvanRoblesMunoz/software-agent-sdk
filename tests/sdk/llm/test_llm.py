@@ -11,7 +11,7 @@ from pydantic import SecretStr
 
 from openhands.sdk.llm import LLM, LLMResponse, Message, TextContent
 from openhands.sdk.llm.exceptions import LLMNoResponseError
-from openhands.sdk.llm.llm_auth import LLMAuth
+from openhands.sdk.llm.llm_auth import LLMAuth, LLMAuthStatus
 from openhands.sdk.llm.llm_registry import LLMRegistry
 from openhands.sdk.llm.options.responses_options import select_responses_options
 from openhands.sdk.llm.utils.metrics import Metrics, TokenUsage
@@ -81,6 +81,32 @@ def test_base_url_for_openhands_provider_with_explicit_none(mock_get):
 
 
 class TestLLMAuth:
+    @pytest.mark.parametrize(
+        "name,credentials,expected_status,expected_has_valid_credentials",
+        [
+            ("missing", {}, LLMAuthStatus.MISSING, False),
+            ("corrupted", {"api_key": None}, LLMAuthStatus.CORRUPTED, False),
+            (
+                "configured",
+                {"api_key": SecretStr("sk")},
+                LLMAuthStatus.CONFIGURED,
+                True,
+            ),
+        ],
+    )
+    def test_llm_auth_status_and_properties(
+        self, name, credentials, expected_status, expected_has_valid_credentials
+    ):
+        auth = LLMAuth(name=name, credentials=credentials)
+        assert auth.status == expected_status
+        assert auth.has_valid_credentials is expected_has_valid_credentials
+
+    def test_llm_auth_coerces_string_credentials(self):
+        auth = LLMAuth(name="coerce", credentials={"api_key": "sk-test"})
+        assert auth.credentials["api_key"] is not None
+        assert isinstance(auth.credentials["api_key"], SecretStr)
+        assert auth.credentials["api_key"].get_secret_value() == "sk-test"
+
     def test_auth_profile_overrides_direct_key(self, monkeypatch, tmp_path):
         auth_dir = tmp_path / "auth_profiles"
         auth_dir.mkdir(parents=True, exist_ok=True)
