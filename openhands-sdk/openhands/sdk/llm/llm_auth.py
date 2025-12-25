@@ -11,7 +11,6 @@ class LLMAuthStatus(str, Enum):
     is missing or unusable. This is intended for UI/diagnostics and should
     not be used as a security signal.
 
-    - ENV: Credentials resolved from environment variables.
     - DIRECT: Credentials set directly on the LLM configuration.
     - MISSING: No credentials available from any source.
     - NOT_CONFIGURED: Auth profile name set but profile not found.
@@ -19,7 +18,6 @@ class LLMAuthStatus(str, Enum):
     - CORRUPTED: Auth profile found but credentials cannot be decrypted.
     """
 
-    ENV = "env"
     DIRECT = "direct"
     MISSING = "missing"
     NOT_CONFIGURED = "not_configured"
