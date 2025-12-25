@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 from openhands.sdk.context.agent_context import AgentContext
-from openhands.sdk.context.condenser import CondenserBase, LLMSummarizingCondenser
+from openhands.sdk.context.condenser import CondenserBase
 from openhands.sdk.context.prompts.prompt import render_template
 from openhands.sdk.llm import LLM
 from openhands.sdk.llm.utils.model_prompt_spec import get_model_prompt_spec
@@ -309,25 +309,15 @@ class AgentBase(DiscriminatedUnionMixin, ABC):
                 f"{self.__class__.__name__}."
             )
 
-        # Get all LLMs from both self and persisted to reconcile them
+        # Reconcile LLM and condenser from runtime
         new_llm = self.llm.resolve_diff_from_deserialized(persisted.llm)
         updates: dict[str, Any] = {"llm": new_llm}
 
-        # Reconcile the condenser's LLM if it exists
+        # Reconcile condenser if both runtime and persisted have one
         if self.condenser is not None and persisted.condenser is not None:
-            # Check if both condensers are LLMSummarizingCondenser
-            # (which has an llm field)
-
-            if isinstance(self.condenser, LLMSummarizingCondenser) and isinstance(
-                persisted.condenser, LLMSummarizingCondenser
-            ):
-                new_condenser_llm = self.condenser.llm.resolve_diff_from_deserialized(
-                    persisted.condenser.llm
-                )
-                new_condenser = persisted.condenser.model_copy(
-                    update={"llm": new_condenser_llm}
-                )
-                updates["condenser"] = new_condenser
+            updates["condenser"] = self.condenser.resolve_diff_from_deserialized(
+                persisted.condenser
+            )
 
         # Reconcile agent_context - always use the current environment's agent_context
         # This allows resuming conversations from different directories and handles

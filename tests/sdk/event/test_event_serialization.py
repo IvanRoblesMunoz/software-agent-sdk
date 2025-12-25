@@ -90,6 +90,8 @@ def test_action_event_serialization() -> None:
     assert deserialized.tool_call_id == event.tool_call_id
     assert deserialized.tool_call == event.tool_call
     assert deserialized.llm_response_id == event.llm_response_id
+    assert deserialized.model_name == event.model_name
+    assert deserialized.usage_id == event.usage_id
     # Action is deserialized as Action, so we can't check exact equality
 
 
@@ -130,6 +132,8 @@ def test_message_event_serialization() -> None:
     json_data = event.model_dump_json()
     deserialized = MessageEvent.model_validate_json(json_data)
     assert deserialized == event
+    assert deserialized.model_name is None
+    assert deserialized.usage_id is None
 
 
 def test_agent_error_event_serialization() -> None:
@@ -149,12 +153,16 @@ def test_condensation_serialization() -> None:
         summary="This is a summary",
         forgotten_event_ids=["event1", "event2", "event3", "event4", "event5"],
         llm_response_id="condensation_response_1",
+        model_name="gpt-4o",
+        usage_id="condenser-instance-1",
     )
 
     # Serialize
     json_data = event.model_dump_json()
     deserialized = Condensation.model_validate_json(json_data)
     assert deserialized == event
+    assert deserialized.model_name == event.model_name
+    assert deserialized.usage_id == event.usage_id
 
 
 def test_condensation_request_serialization() -> None:
@@ -201,3 +209,6 @@ def test_event_deserialize():
     dumped = original.model_dump_json()
     loaded = Event.model_validate_json(dumped)
     assert loaded == original
+    assert isinstance(loaded, MessageEvent)
+    assert loaded.model_name is None
+    assert loaded.usage_id is None

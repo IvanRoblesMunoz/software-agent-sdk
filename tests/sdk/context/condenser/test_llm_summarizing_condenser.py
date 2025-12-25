@@ -59,6 +59,7 @@ def mock_llm() -> LLM:
     mock_llm.aws_region_name = None
     mock_llm.metrics = None
     mock_llm.model = "test-model"
+    mock_llm.usage_id = "test-condenser-usage-id"
     mock_llm.log_completions = False
     mock_llm.log_completions_folder = None
     mock_llm.custom_tokenizer = None
@@ -136,6 +137,8 @@ def test_condense_returns_condensation_when_needed(mock_llm: LLM) -> None:
     assert result.summary == "Summary of forgotten events"
     assert result.summary_offset == keep_first
     assert len(result.forgotten_event_ids) > 0
+    assert result.model_name == "test-model"
+    assert result.usage_id == "test-condenser-usage-id"
 
     # LLM should be called once
     cast(MagicMock, mock_llm.completion).assert_called_once()

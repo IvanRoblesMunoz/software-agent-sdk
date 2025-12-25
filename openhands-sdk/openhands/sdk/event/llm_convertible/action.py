@@ -59,6 +59,17 @@ class ActionEvent(LLMConvertibleEvent):
             "from the same LLM response."
         ),
     )
+    model_name: str | None = Field(
+        default=None,
+        description=(
+            "Name of the LLM model that generated this action "
+            "(e.g., 'gpt-4o', 'claude-sonnet-4')"
+        ),
+    )
+    usage_id: str | None = Field(
+        default=None,
+        description="Usage ID of the LLM instance that generated this action",
+    )
 
     security_risk: risk.SecurityRisk = Field(
         default=risk.SecurityRisk.UNKNOWN,

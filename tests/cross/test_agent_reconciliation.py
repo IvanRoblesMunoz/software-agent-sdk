@@ -4,6 +4,7 @@ import tempfile
 import uuid
 from unittest.mock import patch
 
+import pytest
 from pydantic import SecretStr
 
 from openhands.sdk import Agent
@@ -212,57 +213,62 @@ def test_conversation_with_same_agent_succeeds():
         assert len(new_conversation.state.events) > 0
 
 
-def test_agent_resolve_diff_from_deserialized():
-    """Test agent's resolve_diff_from_deserialized method.
-
-    Includes tolerance for litellm_extra_body differences injected at CLI load time.
-    """
+@pytest.mark.parametrize(
+    "model_change,usage_id_change,extra_body_change",
+    [
+        (False, False, True),  # litellm_extra_body only
+        (True, False, False),  # model change only
+        (False, True, False),  # usage_id change only
+        (True, True, False),  # both model and usage_id change
+    ],
+)
+def test_agent_resolve_diff_from_deserialized(
+    model_change, usage_id_change, extra_body_change
+):
+    """Test agent reconciliation with various LLM field changes."""
     with tempfile.TemporaryDirectory():
-        # Create original agent
         tools = [Tool(name="TerminalTool")]
+
+        # Create original agent
         llm = LLM(
             model="gpt-4o-mini", api_key=SecretStr("test-key"), usage_id="test-llm"
         )
         original_agent = Agent(llm=llm, tools=tools)
 
-        # Serialize and deserialize to simulate persistence
+        # Serialize and deserialize
         serialized = original_agent.model_dump_json()
         deserialized_agent = AgentBase.model_validate_json(serialized)
 
-        # Create runtime agent with same configuration
+        # Create runtime agent with changes
+        runtime_model = "gpt-4o" if model_change else "gpt-4o-mini"
+        runtime_usage_id = "different-llm" if usage_id_change else "test-llm"
+        runtime_extra_body = (
+            {
+                "metadata": {
+                    "session_id": "sess-123",
+                    "tags": ["app:openhands", "model:gpt-4o-mini"],
+                    "trace_version": "1.2.3",
+                }
+            }
+            if extra_body_change
+            else {}
+        )
+
         llm2 = LLM(
-            model="gpt-4o-mini", api_key=SecretStr("test-key"), usage_id="test-llm"
+            model=runtime_model,
+            api_key=SecretStr("test-key"),
+            usage_id=runtime_usage_id,
+            litellm_extra_body=runtime_extra_body,
         )
         runtime_agent = Agent(llm=llm2, tools=tools)
 
-        # Should resolve successfully
+        # Should resolve successfully - all changes allowed
         resolved = runtime_agent.resolve_diff_from_deserialized(deserialized_agent)
-        # Test model_dump equality
-        assert resolved.model_dump(mode="json") == runtime_agent.model_dump(mode="json")
-        assert resolved.llm.model == runtime_agent.llm.model
-        assert resolved.__class__ == runtime_agent.__class__
 
-        # Now simulate CLI injecting dynamic litellm_extra_body metadata at load time
-        injected = deserialized_agent.model_copy(
-            update={
-                "llm": deserialized_agent.llm.model_copy(
-                    update={
-                        "litellm_extra_body": {
-                            "metadata": {
-                                "session_id": "sess-123",
-                                "tags": ["app:openhands", "model:gpt-4o-mini"],
-                                "trace_version": "1.2.3",
-                            }
-                        }
-                    }
-                )
-            }
-        )
-
-        # Reconcile again: differences in litellm_extra_body should be allowed and
-        # the runtime value should be preferred without raising an error.
-        resolved2 = runtime_agent.resolve_diff_from_deserialized(injected)
-        assert resolved2.llm.litellm_extra_body == runtime_agent.llm.litellm_extra_body
+        # Verify runtime values used
+        assert resolved.llm.model == runtime_model
+        assert resolved.llm.usage_id == runtime_usage_id
+        assert resolved.llm.litellm_extra_body == runtime_extra_body
 
 
 @patch("openhands.sdk.llm.llm.litellm_completion")
@@ -425,3 +431,55 @@ def test_conversation_restart_with_different_agent_context():
             "You current working directory is: /Users/jpshack"
             in new_conversation.agent.agent_context.system_message_suffix
         )
+
+
+def test_condenser_llm_reconciliation():
+    """Test that LLMSummarizingCondenser reconciles LLM field, keeps other settings."""
+    llm1 = LLM(model="gpt-4o-mini", api_key=SecretStr("key"), usage_id="llm")
+    llm2 = LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="llm")
+
+    condenser1 = LLMSummarizingCondenser(llm=llm1, max_size=100, keep_first=5)
+    condenser2 = LLMSummarizingCondenser(llm=llm2, max_size=100, keep_first=5)
+
+    reconciled = condenser2.resolve_diff_from_deserialized(condenser1)
+
+    # Runtime LLM used, persisted settings kept
+    assert reconciled.llm.model == "gpt-4o"
+    assert reconciled.max_size == 100
+    assert reconciled.keep_first == 5
+
+
+@pytest.mark.parametrize(
+    "model1,model2",
+    [
+        ("gpt-4o-mini", "gpt-4o"),
+        ("gpt-4o", "gpt-4o-mini"),
+        ("claude-sonnet-4", "gpt-4o"),
+    ],
+)
+def test_conversation_model_switch_end_to_end(tmp_path, model1, model2):
+    """Test full conversation flow with different model switches."""
+    working_dir = str(tmp_path)
+    conversation_id = uuid.uuid4()
+
+    # Create with first model
+    llm1 = LLM(model=model1, api_key=SecretStr("key"), usage_id="llm")
+    agent1 = get_default_agent(llm1)
+    conv1 = Conversation(
+        agent=agent1,
+        persistence_dir=working_dir,
+        conversation_id=conversation_id,
+    )
+    conv1.close()
+
+    # Resume with second model
+    llm2 = LLM(model=model2, api_key=SecretStr("key"), usage_id="llm")
+    agent2 = get_default_agent(llm2)
+    conv2 = Conversation(
+        agent=agent2,
+        persistence_dir=working_dir,
+        conversation_id=conversation_id,
+    )
+
+    # Should use runtime model
+    assert conv2.agent.llm.model == model2

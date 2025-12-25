@@ -259,6 +259,8 @@ class Agent(AgentBase):
             source="agent",
             llm_message=message,
             llm_response_id=llm_response.id,
+            model_name=self.llm.model,
+            usage_id=self.llm.usage_id,
         )
         on_event(msg_event)
 
@@ -380,6 +382,8 @@ class Agent(AgentBase):
                 tool_name=tool_call.name,
                 tool_call_id=tool_call.id,
                 llm_response_id=llm_response_id,
+                model_name=self.llm.model,
+                usage_id=self.llm.usage_id,
                 action=None,
             )
             on_event(tc_event)
@@ -425,6 +429,8 @@ class Agent(AgentBase):
                 tool_name=tool_call.name,
                 tool_call_id=tool_call.id,
                 llm_response_id=llm_response_id,
+                model_name=self.llm.model,
+                usage_id=self.llm.usage_id,
                 action=None,
             )
             on_event(tc_event)
@@ -446,6 +452,8 @@ class Agent(AgentBase):
             tool_call_id=tool_call.id,
             tool_call=tool_call,
             llm_response_id=llm_response_id,
+            model_name=self.llm.model,
+            usage_id=self.llm.usage_id,
             security_risk=security_risk,
         )
         on_event(action_event)

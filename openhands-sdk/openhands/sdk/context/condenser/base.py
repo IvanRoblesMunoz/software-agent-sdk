@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from logging import getLogger
+from typing import Self
 
 from openhands.sdk.context.view import View
 from openhands.sdk.event.condenser import Condensation
@@ -56,6 +57,10 @@ class CondenserBase(DiscriminatedUnionMixin, ABC):
             otherwise.
         """
         return False
+
+    def resolve_diff_from_deserialized(self, persisted: Self) -> Self:
+        """Return persisted condenser. Subclasses override to reconcile LLMs."""
+        return persisted
 
 
 class PipelinableCondenserBase(CondenserBase):
