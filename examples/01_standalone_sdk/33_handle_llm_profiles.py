@@ -37,19 +37,19 @@ llm = LLM(
 
 # Save encrypted profile
 profile_name = "my-claude-profile"
-LLMRegistry.save_profile(profile_name, llm, override_existing=True)
+LLMRegistry.save_llm_profile(profile_name, llm, override_existing=True)
 print(f"✓ Saved encrypted profile '{profile_name}' to ~/.openhands/llm_profiles/")
 
 # List profiles
-print(f"✓ Available profiles: {LLMRegistry.list_profiles()}")
+print(f"✓ Available profiles: {LLMRegistry.list_llm_profiles()}")
 
 # Load and use profile
-loaded_llm = LLMRegistry.load_profile(profile_name)
+loaded_llm = LLMRegistry.load_llm_profile(profile_name)
 print(f"✓ Loaded: {loaded_llm.model}")
 
 agent = Agent(llm=loaded_llm)
 print("✓ Agent created with loaded profile")
 
 # Cleanup
-LLMRegistry.delete_profile(profile_name)
+LLMRegistry.delete_llm_profile(profile_name)
 print(f"✓ Deleted profile '{profile_name}'")

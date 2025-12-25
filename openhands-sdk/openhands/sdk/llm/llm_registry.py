@@ -162,12 +162,12 @@ class LLMRegistry:
         return {"cipher": Cipher(enc_key)} if enc_key else {}
 
     @classmethod
-    def list_profiles(cls) -> list[str]:
+    def list_llm_profiles(cls) -> list[str]:
         """List the names of all available LLM profiles."""
         return [f.stem for f in cls._get_profiles_dir().glob("*.json")]
 
     @classmethod
-    def save_profile(
+    def save_llm_profile(
         cls,
         name: str,
         llm: LLM,
@@ -203,7 +203,7 @@ class LLMRegistry:
         logger.info(f"Saved LLM profile '{name}' ({status}) to {profile_path}")
 
     @classmethod
-    def load_profile(cls, name: str) -> LLM:
+    def load_llm_profile(cls, name: str) -> LLM:
         """Load an LLM profile from disk."""
         profile_path = cls._get_profile_path(name)
         if not profile_path.exists():
@@ -217,7 +217,7 @@ class LLMRegistry:
         return llm
 
     @classmethod
-    def delete_profile(cls, name: str) -> None:
+    def delete_llm_profile(cls, name: str) -> None:
         """Delete an LLM profile from disk."""
         profile_path = cls._get_profile_path(name)
         if not profile_path.exists():
