@@ -1091,7 +1091,7 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
         return cls(**data)
 
     def resolve_diff_from_deserialized(self, persisted: LLM) -> LLM:
-        """Use runtime LLM, allowing model switching."""
+        """Return runtime LLM, allowing model switching on conversation resume."""
         if persisted.model != self.model:
             logger.warning(f"LLM model changed: {persisted.model} -> {self.model}")
         if persisted.usage_id != self.usage_id:
