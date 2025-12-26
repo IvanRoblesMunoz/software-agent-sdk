@@ -17,14 +17,14 @@ class LLMAuthStatus(str, Enum):
     - MISSING: No credentials available from any source.
     - NOT_CONFIGURED: Auth profile name set but profile not found.
     - CONFIGURED: Auth profile found and credentials are valid.
-    - CORRUPTED: Auth profile found but credentials cannot be decrypted.
+    - UNREADABLE: Auth profile found but credentials cannot be decrypted.
     """
 
     DIRECT = "direct"
     MISSING = "missing"
     NOT_CONFIGURED = "not_configured"
     CONFIGURED = "configured"
-    CORRUPTED = "corrupted"
+    UNREADABLE = "unreadable"
 
 
 class LLMAuth(BaseModel):
@@ -69,7 +69,7 @@ class LLMAuth(BaseModel):
 
         # Check if any credentials are None (failed decryption/corruption)
         if any(v is None for v in self.credentials.values()):
-            return LLMAuthStatus.CORRUPTED
+            return LLMAuthStatus.UNREADABLE
 
         return LLMAuthStatus.CONFIGURED
 

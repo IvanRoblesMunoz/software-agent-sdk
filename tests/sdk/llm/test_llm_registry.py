@@ -605,7 +605,7 @@ class TestLLMAuthProfilePersistence:
 
         loaded = LLMRegistry.load_auth_profile("test")
         assert loaded.name == self.sample_auth.name
-        assert loaded.status == LLMAuthStatus.CORRUPTED
+        assert loaded.status == LLMAuthStatus.UNREADABLE
 
     def test_save_auth_profile_override_existing(self):
         """Test override_existing flag."""
@@ -684,18 +684,18 @@ class TestLLMAuthProfilePersistence:
     def test_list_auth_profiles_filtered_by_status(self):
         """Test filtering auth profiles by status."""
         missing_auth = LLMAuth(name="missing", credentials={})
-        corrupted_auth = LLMAuth(
-            name="corrupted",
+        unreadable_auth = LLMAuth(
+            name="unreadable",
             credentials=self.sample_auth.credentials,
         )
         LLMRegistry.save_auth_profile(missing_auth, override_existing=True)
-        LLMRegistry.save_auth_profile(corrupted_auth, override_existing=True)
+        LLMRegistry.save_auth_profile(unreadable_auth, override_existing=True)
 
         missing_profiles = LLMRegistry.list_auth_profiles(LLMAuthStatus.MISSING)
-        corrupted_profiles = LLMRegistry.list_auth_profiles(LLMAuthStatus.CORRUPTED)
+        unreadable_profiles = LLMRegistry.list_auth_profiles(LLMAuthStatus.UNREADABLE)
 
         assert missing_profiles == ["missing"]
-        assert corrupted_profiles == ["corrupted"]
+        assert unreadable_profiles == ["unreadable"]
 
 
 class TestLLMAuthProfileEndToEnd:

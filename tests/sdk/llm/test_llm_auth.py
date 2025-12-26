@@ -15,7 +15,7 @@ def _clear_llm_auth_env(monkeypatch):
     "name,credentials,expected_status,expected_has_valid_credentials",
     [
         ("missing", {}, LLMAuthStatus.MISSING, False),
-        ("corrupted", {"api_key": None}, LLMAuthStatus.CORRUPTED, False),
+        ("unreadable", {"api_key": None}, LLMAuthStatus.UNREADABLE, False),
         ("configured", {"api_key": SecretStr("sk")}, LLMAuthStatus.CONFIGURED, True),
     ],
 )
