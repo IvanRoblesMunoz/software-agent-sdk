@@ -35,23 +35,18 @@ class LLMRegistry:
 
     registry_id: str
     retry_listener: Callable[[int, int], None] | None
-    profile_name: str | None
 
     def __init__(
         self,
         retry_listener: Callable[[int, int], None] | None = None,
-        profile_name: str | None = None,
     ):
         """Initialize the LLM registry.
 
         Args:
             retry_listener: Optional callback for retry events.
-            profile_name: Optional name for this registry profile.
-                         Required when saving registry profiles.
         """
         self.registry_id = str(uuid4())
         self.retry_listener = retry_listener
-        self.profile_name = profile_name
         self._usage_to_llm: dict[str, LLM] = {}
         self.subscriber: Callable[[RegistryEvent], None] | None = None
 
@@ -145,7 +140,6 @@ class LLMRegistry:
             >>> registry.add_llms_from_profiles({
             ...     "agent": "claude-sonnet",
             ...     "title-gen": "gpt-4o",
-            ...     "code-gen": "o3-mini",
             ... })
         """
         for usage_id, profile_name in usage_to_profile.items():
@@ -197,19 +191,9 @@ class LLMRegistry:
         llm: LLM,
         override_existing: bool = False,
     ) -> None:
-        """
-        Save an LLM instance as a named profile.
+        """Save an LLM instance as a named profile.
 
-        Secrets are automatically encrypted if OPENHANDS_ENCRYPTION_KEY is set.
-
-        Args:
-            name: Profile name to save as.
-            llm: The LLM instance to save.
-            override_existing: If True, overwrite existing profile.
-
-        Raises:
-            ValueError: If profile name is invalid.
-            FileExistsError: If profile already exists and override_existing is False.
+        Secrets are encrypted if OPENHANDS_ENCRYPTION_KEY is set.
         """
         cls._validate_profile_name(name)
         profile_path = cls._get_profile_path(name)
@@ -239,13 +223,7 @@ class LLMRegistry:
     def load_llm_profile(cls, name: str, usage_id: str | None = None) -> LLM:
         """Load an LLM profile from disk.
 
-        Args:
-            name: Name of the profile to load.
-            usage_id: Optional usage_id to set on the loaded LLM.
-                     If not provided, keeps the default ("default").
-
-        Returns:
-            The loaded LLM instance.
+        Optionally override the usage_id on the loaded LLM.
         """
         profile_path = cls._get_profile_path(name)
         if not profile_path.exists():
@@ -282,7 +260,7 @@ class LLMRegistry:
     @staticmethod
     def _get_registry_profiles_dir() -> Path:
         """Get the standard directory for registry profiles."""
-        path = Path.home() / ".openhands" / "registry_profiles"
+        path = Path.home() / ".openhands" / "llm_registry_profiles"
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -298,30 +276,14 @@ class LLMRegistry:
     @classmethod
     def save_registry_profile(
         cls,
+        name: str,
         registry: "LLMRegistry",
         override_existing: bool = False,
     ) -> None:
+        """Save a registry with all its LLMs as a named profile.
+
+        Secrets are encrypted if OPENHANDS_ENCRYPTION_KEY is set.
         """
-        Save a registry with all its LLMs as a named profile.
-
-        The profile name is taken from registry.profile_name, which must be set.
-        Secrets are automatically encrypted if OPENHANDS_ENCRYPTION_KEY is set.
-
-        Args:
-            registry: The LLMRegistry instance to save. Must have profile_name set.
-            override_existing: If True, overwrite existing profile.
-
-        Raises:
-            ValueError: If registry.profile_name is not set.
-            FileExistsError: If profile already exists and override_existing is False.
-        """
-        if not registry.profile_name:
-            raise ValueError(
-                "Registry must have profile_name set before saving. "
-                "Set registry.profile_name to the desired profile name."
-            )
-
-        name = registry.profile_name
         cls._validate_profile_name(name)
         profile_path = cls._get_registry_profile_path(name)
         if profile_path.exists() and not override_existing:
@@ -359,15 +321,7 @@ class LLMRegistry:
 
     @classmethod
     def load_registry_profile(cls, name: str) -> "LLMRegistry":
-        """Load a registry profile from disk.
-
-        Args:
-            name: Name of the registry profile to load.
-
-        Returns:
-            A new LLMRegistry instance populated with all LLMs from the profile.
-            The registry's profile_name will be set to name.
-        """
+        """Load a registry profile with all its LLMs from disk."""
         profile_path = cls._get_registry_profile_path(name)
         if not profile_path.exists():
             raise FileNotFoundError(f"Registry profile '{name}' not found.")
@@ -375,8 +329,8 @@ class LLMRegistry:
         with open(profile_path) as f:
             data = json.load(f)
 
-        # Create new registry with the profile name
-        registry = cls(profile_name=name)
+        # Create new registry
+        registry = cls()
 
         # Load and add all LLMs
         cipher_context = cls._get_cipher_context()

@@ -413,7 +413,7 @@ class TestLLMProfilePersistence:
     def test_save_registry_profile(self):
         """Test saving a registry profile."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        registry = LLMRegistry(profile_name="test-registry")
+        registry = LLMRegistry()
 
         llm1 = LLM(
             model="gpt-4o",
@@ -429,7 +429,7 @@ class TestLLMProfilePersistence:
         registry.add(llm1)
         registry.add(llm2)
 
-        LLMRegistry.save_registry_profile(registry)
+        LLMRegistry.save_registry_profile("test-registry", registry)
 
         # Verify file exists
         registry_path = (
@@ -440,7 +440,7 @@ class TestLLMProfilePersistence:
     def test_load_registry_profile(self):
         """Test loading a registry profile."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        registry = LLMRegistry(profile_name="test-registry")
+        registry = LLMRegistry()
 
         llm1 = LLM(model="gpt-4o", api_key=SecretStr("key1"), usage_id="agent")
         llm2 = LLM(model="gpt-3.5", api_key=SecretStr("key2"), usage_id="title-gen")
@@ -448,11 +448,10 @@ class TestLLMProfilePersistence:
         registry.add(llm1)
         registry.add(llm2)
 
-        LLMRegistry.save_registry_profile(registry)
+        LLMRegistry.save_registry_profile("test-registry", registry)
 
         # Load it back
         loaded_registry = LLMRegistry.load_registry_profile("test-registry")
-        assert loaded_registry.profile_name == "test-registry"
         assert len(loaded_registry.list_usage_ids()) == 2
         assert "agent" in loaded_registry.list_usage_ids()
         assert "title-gen" in loaded_registry.list_usage_ids()
@@ -461,23 +460,26 @@ class TestLLMProfilePersistence:
         assert loaded_llm1.model == "gpt-4o"
         assert loaded_llm1.usage_id == "agent"
 
-    def test_save_registry_profile_requires_profile_name(self):
-        """Test that save_registry_profile requires profile_name to be set."""
-        registry = LLMRegistry()  # No profile_name
-        with pytest.raises(ValueError, match="must have profile_name set"):
-            LLMRegistry.save_registry_profile(registry)
+    def test_save_registry_profile_validates_name(self):
+        """Test that save_registry_profile validates the profile name."""
+        registry = LLMRegistry()
+        registry.add(LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="test"))
+
+        # Test with invalid name
+        with pytest.raises(ValueError, match="alphanumerics"):
+            LLMRegistry.save_registry_profile("invalid name", registry)
 
     def test_list_registry_profiles(self):
         """Test listing registry profiles."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
 
-        reg1 = LLMRegistry(profile_name="reg1")
+        reg1 = LLMRegistry()
         reg1.add(LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="test"))
-        LLMRegistry.save_registry_profile(reg1)
+        LLMRegistry.save_registry_profile("reg1", reg1)
 
-        reg2 = LLMRegistry(profile_name="reg2")
+        reg2 = LLMRegistry()
         reg2.add(LLM(model="gpt-3.5", api_key=SecretStr("key"), usage_id="test"))
-        LLMRegistry.save_registry_profile(reg2)
+        LLMRegistry.save_registry_profile("reg2", reg2)
 
         profiles = LLMRegistry.list_registry_profiles()
         assert len(profiles) == 2
@@ -486,9 +488,9 @@ class TestLLMProfilePersistence:
     def test_delete_registry_profile(self):
         """Test deleting a registry profile."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        registry = LLMRegistry(profile_name="test-registry")
+        registry = LLMRegistry()
         registry.add(LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="test"))
-        LLMRegistry.save_registry_profile(registry)
+        LLMRegistry.save_registry_profile("test-registry", registry)
 
         registry_path = (
             Path(self.temp_dir.name) / "registry_profiles" / "test-registry.json"

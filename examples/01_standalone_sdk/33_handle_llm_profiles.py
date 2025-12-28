@@ -70,7 +70,6 @@ registry.add_llms_from_profiles(
     {
         "agent": "claude-sonnet",  # Load claude-sonnet.json with usage_id="agent"
         "title-gen": "gpt-4o",  # Load gpt-4o.json with usage_id="title-gen"
-        "code-gen": "o3-mini",  # Load o3-mini.json with usage_id="code-gen"
     }
 )
 
@@ -82,11 +81,12 @@ agent_llm = registry.get("agent")
 print(f"✓ Agent LLM: {agent_llm.model} (usage: {agent_llm.usage_id})")
 
 # Save entire registry as a profile
-registry.profile_name = "my-multi-llm-setup"
-LLMRegistry.save_registry_profile(registry, override_existing=True)
+LLMRegistry.save_registry_profile(
+    "my-multi-llm-setup", registry, override_existing=True
+)
 print(
-    f"✓ Saved registry profile '{registry.profile_name}' "
-    f"to ~/.openhands/registry_profiles/"
+    "✓ Saved registry profile 'my-multi-llm-setup' "
+    "to ~/.openhands/llm_registry_profiles/"
 )
 
 # Load registry profile
