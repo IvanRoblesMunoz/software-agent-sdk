@@ -74,7 +74,7 @@ print(f"✓ Loaded auth profile: {loaded_auth.name}")
 
 llm_with_auth = LLM(
     model=loaded_llm.model,
-    usage_id="agent-auth",
+    usage_id="agent",
     auth_profile=loaded_auth.name,
 )
 
