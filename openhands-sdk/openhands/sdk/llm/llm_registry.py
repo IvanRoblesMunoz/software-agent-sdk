@@ -216,8 +216,8 @@ class LLMRegistry:
         with open(profile_path, "w") as f:
             json.dump(llm.model_dump(context=context, mode="json"), f, indent=2)
 
-        status = "encrypted" if has_cipher else "plaintext"
-        logger.info(f"Saved LLM profile '{name}' ({status}) to {profile_path}")
+        status = "encrypted" if has_cipher else "redacted"
+        logger.info(f"Saved LLM profile '{name}' ({status} keys) to {profile_path}")
 
     @classmethod
     def load_llm_profile(cls, name: str, usage_id: str | None = None) -> LLM:
@@ -307,11 +307,11 @@ class LLMRegistry:
         with open(profile_path, "w") as f:
             json.dump(registry_data, f, indent=2)
 
-        status = "encrypted" if has_cipher else "plaintext"
+        status = "encrypted" if has_cipher else "redacted"
         llm_count = len(llms_data)
         logger.info(
             f"Saved registry profile '{name}' with {llm_count} LLM(s) "
-            f"({status}) to {profile_path}"
+            f"({status} keys) to {profile_path}"
         )
 
     @classmethod
