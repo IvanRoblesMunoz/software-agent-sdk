@@ -1,0 +1,7 @@
+{
+  "model": "openai/o3-mini",
+  "auth_profile": "openai",
+  "temperature": 1.0,
+  "max_output_tokens": 8192,
+  "reasoning_effort": "high"
+}

@@ -1,0 +1,6 @@
+{
+  "model": "openai/gpt-4o",
+  "auth_profile": "openai",
+  "temperature": 0.2,
+  "max_output_tokens": 4096
+}
