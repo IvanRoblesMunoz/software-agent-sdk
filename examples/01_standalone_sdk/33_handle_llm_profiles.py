@@ -39,22 +39,18 @@ llm = LLM(
     model="anthropic/claude-sonnet-4-5-20250929",
     api_key=SecretStr(api_key),
     usage_id="agent",
-    profile_name="my-claude-profile",  # Set profile_name for saving
 )
 
 # Save encrypted profile
-LLMRegistry.save_llm_profile(llm, override_existing=True)
-print(f"✓ Saved encrypted profile '{llm.profile_name}' to ~/.openhands/llm_profiles/")
+LLMRegistry.save_llm_profile("my-claude-profile", llm, override_existing=True)
+print("✓ Saved encrypted profile 'my-claude-profile' to ~/.openhands/llm_profiles/")
 
 # List profiles
 print(f"✓ Available profiles: {LLMRegistry.list_llm_profiles()}")
 
 # Load profile and optionally override usage_id
 loaded_llm = LLMRegistry.load_llm_profile("my-claude-profile", usage_id="custom-agent")
-print(
-    f"✓ Loaded: {loaded_llm.model} "
-    f"(profile: {loaded_llm.profile_name}, usage: {loaded_llm.usage_id})"
-)
+print(f"✓ Loaded: {loaded_llm.model} (usage: {loaded_llm.usage_id})")
 
 agent = Agent(llm=loaded_llm)
 print("✓ Agent created with loaded profile")

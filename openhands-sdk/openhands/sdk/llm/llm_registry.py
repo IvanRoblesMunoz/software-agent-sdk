@@ -193,30 +193,24 @@ class LLMRegistry:
     @classmethod
     def save_llm_profile(
         cls,
+        name: str,
         llm: LLM,
         override_existing: bool = False,
     ) -> None:
         """
         Save an LLM instance as a named profile.
 
-        The profile name is taken from llm.profile_name, which must be set.
         Secrets are automatically encrypted if OPENHANDS_ENCRYPTION_KEY is set.
 
         Args:
-            llm: The LLM instance to save. Must have profile_name set.
+            name: Profile name to save as.
+            llm: The LLM instance to save.
             override_existing: If True, overwrite existing profile.
 
         Raises:
-            ValueError: If llm.profile_name is not set.
+            ValueError: If profile name is invalid.
             FileExistsError: If profile already exists and override_existing is False.
         """
-        if not llm.profile_name:
-            raise ValueError(
-                "LLM must have profile_name set before saving. "
-                "Set llm.profile_name to the desired profile name."
-            )
-
-        name = llm.profile_name
         cls._validate_profile_name(name)
         profile_path = cls._get_profile_path(name)
         if profile_path.exists() and not override_existing:
@@ -251,7 +245,7 @@ class LLMRegistry:
                      If not provided, keeps the default ("default").
 
         Returns:
-            The loaded LLM instance with profile_name set to name.
+            The loaded LLM instance.
         """
         profile_path = cls._get_profile_path(name)
         if not profile_path.exists():
@@ -261,9 +255,6 @@ class LLMRegistry:
             data = json.load(f)
 
         llm = LLM.model_validate(data, context=cls._get_cipher_context())
-
-        # Set profile_name to track where this LLM came from
-        llm.profile_name = name
 
         # Optionally override usage_id
         if usage_id is not None:
