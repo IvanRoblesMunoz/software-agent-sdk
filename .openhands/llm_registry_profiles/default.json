@@ -3,7 +3,6 @@
     "agent": {
       "model": "bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0",
       "auth_profile": "aws-bedrock",
-      "aws_region_name": "us-east-1",
       "usage_id": "agent",
       "temperature": 0.0,
       "max_output_tokens": 8192
@@ -11,7 +10,6 @@
     "title-gen": {
       "model": "bedrock/anthropic.claude-sonnet-4-5-20250929-v1:0",
       "auth_profile": "aws-bedrock",
-      "aws_region_name": "us-east-1",
       "usage_id": "title-gen",
       "temperature": 0.3,
       "max_output_tokens": 2048
