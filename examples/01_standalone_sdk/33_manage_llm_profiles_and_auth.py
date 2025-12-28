@@ -34,20 +34,6 @@ assert encryption_key is not None, (
 api_key = os.getenv("LLM_API_KEY")
 assert api_key is not None, "LLM_API_KEY must be set"
 
-# Create LLM configuration
-llm = LLM(
-    model="anthropic/claude-sonnet-4-5-20250929",
-    api_key=SecretStr(api_key),
-    usage_id="agent",
-)
-
-# Save encrypted LLM profile
-llm_profile_name = "my-claude-profile"
-LLMRegistry.save_llm_profile(llm_profile_name, llm, override_existing=True)
-print(
-    f"✓ Saved encrypted LLM profile '{llm_profile_name}' to ~/.openhands/llm_profiles/"
-)
-
 # Save encrypted auth profile
 auth_profile_name = "my-claude-auth"
 auth_profile = LLMAuth(
@@ -60,6 +46,20 @@ print(
     "to ~/.openhands/auth_profiles/"
 )
 
+# Create LLM configuration using the auth profile
+llm = LLM(
+    model="anthropic/claude-sonnet-4-5-20250929",
+    auth_profile=auth_profile_name,
+    usage_id="agent",
+)
+
+# Save encrypted LLM profile
+llm_profile_name = "my-claude-profile"
+LLMRegistry.save_llm_profile(llm_profile_name, llm, override_existing=True)
+print(
+    f"✓ Saved encrypted LLM profile '{llm_profile_name}' to ~/.openhands/llm_profiles/"
+)
+
 # List profiles
 print(f"✓ Available LLM profiles: {LLMRegistry.list_llm_profiles()}")
 print(f"✓ Available auth profiles: {LLMRegistry.list_auth_profiles()}")
@@ -68,21 +68,8 @@ print(f"✓ Available auth profiles: {LLMRegistry.list_auth_profiles()}")
 loaded_llm = LLMRegistry.load_llm_profile(llm_profile_name)
 print(f"✓ Loaded LLM: {loaded_llm.model}")
 
-# Load and use auth profile
-loaded_auth = LLMRegistry.load_auth_profile(auth_profile_name)
-print(f"✓ Loaded auth profile: {loaded_auth.name}")
-
-llm_with_auth = LLM(
-    model=loaded_llm.model,
-    usage_id="agent",
-    auth_profile=loaded_auth.name,
-)
-
 agent = Agent(llm=loaded_llm)
 print("✓ Agent created with loaded LLM profile")
-
-agent_with_auth = Agent(llm=llm_with_auth)
-print("✓ Agent created with auth profile")
 
 # ============================================================================
 # Registry profile workflow - save multiple LLMs together
