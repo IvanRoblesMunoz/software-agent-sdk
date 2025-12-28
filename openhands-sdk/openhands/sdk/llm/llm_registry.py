@@ -15,6 +15,7 @@ from openhands.sdk.utils.pydantic_secrets import Cipher
 
 logger = get_logger(__name__)
 
+# Allow only alphanumerics, dot, underscore, and hyphen for profile names.
 _VALID_LLM_PROFILE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -176,6 +177,12 @@ class LLMRegistry:
 
     @staticmethod
     def _get_cipher_context() -> dict[str, Any]:
+        """Build cipher context for secret (de)serialization.
+
+        If OPENHANDS_ENCRYPTION_KEY is unset, return an empty context so
+        SecretStr fields are redacted on save; this trades a bit of setup
+        friction for avoiding silent plaintext credential writes to disk.
+        """
         enc_key = os.environ.get("OPENHANDS_ENCRYPTION_KEY")
         return {"cipher": Cipher(enc_key)} if enc_key else {}
 
