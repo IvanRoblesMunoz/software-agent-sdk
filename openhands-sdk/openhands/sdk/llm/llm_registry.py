@@ -451,8 +451,8 @@ class LLMRegistry:
         with open(profile_path, "w") as f:
             json.dump(auth.model_dump(context=context, mode="json"), f, indent=2)
 
-        status = "encrypted" if has_cipher else "plaintext"
-        logger.info(f"Saved auth profile '{name}' ({status}) to {profile_path}")
+        status = "encrypted" if has_cipher else "redacted"
+        logger.info(f"Saved auth profile '{name}' ({status} keys) to {profile_path}")
 
     @classmethod
     def load_auth_profile(cls, name: str) -> LLMAuth:
