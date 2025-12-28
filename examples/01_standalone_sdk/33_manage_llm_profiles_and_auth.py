@@ -89,14 +89,18 @@ print("✓ Agent created with auth profile")
 # ============================================================================
 print("\n=== Registry Profile Demo ===")
 
-# Create registry with multiple LLMs
+# Create registry with multiple LLMs using the same profile with different usage IDs
 registry = LLMRegistry()
 registry.add_llms_from_profiles(
     {
-        "agent": llm_profile_name,  # Load and assign usage_id="agent"
+        "agent": llm_profile_name,  # Load profile with usage_id="agent"
+        "title-gen": llm_profile_name,  # Load same profile with usage_id="title-gen"
     }
 )
-print(f"✓ Loaded {len(registry.list_usage_ids())} LLM(s) into registry")
+print(
+    f"✓ Loaded {len(registry.list_usage_ids())} LLM(s) into registry: "
+    f"{registry.list_usage_ids()}"
+)
 
 # Save entire registry as a profile
 registry_profile_name = "my-multi-llm-setup"
@@ -112,6 +116,10 @@ print(
     f"✓ Loaded registry with {len(loaded_registry.list_usage_ids())} LLM(s): "
     f"{loaded_registry.list_usage_ids()}"
 )
+
+# Check credential status for all LLMs
+status = loaded_registry.get_llms_status()
+print(f"✓ LLM credential status: {status}")
 
 # Cleanup
 LLMRegistry.delete_llm_profile(llm_profile_name)

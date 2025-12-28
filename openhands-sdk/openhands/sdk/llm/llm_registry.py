@@ -133,6 +133,24 @@ class LLMRegistry:
 
         return list(self._usage_to_llm.keys())
 
+    def get_llms_status(self) -> dict[str, LLMAuthStatus]:
+        """Get the credential status for all LLMs in the registry.
+
+        Returns:
+            Dictionary mapping usage_id to credential status.
+
+        Example:
+            >>> registry = LLMRegistry()
+            >>> # ... add LLMs ...
+            >>> status = registry.get_llms_status()
+            >>> print(status)
+            {'agent': LLMAuthStatus.CONFIGURED, 'title-gen': LLMAuthStatus.DIRECT}
+        """
+        return {
+            usage_id: llm.credentials_status
+            for usage_id, llm in self._usage_to_llm.items()
+        }
+
     def add_llms_from_profiles(self, usage_to_profile: dict[str, str]) -> None:
         """Load and add multiple LLM profiles to the registry.
 
@@ -459,4 +477,3 @@ class LLMRegistry:
 
         profile_path.unlink()
         logger.info(f"Deleted auth profile '{name}'")
-

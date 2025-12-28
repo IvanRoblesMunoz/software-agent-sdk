@@ -548,6 +548,33 @@ class TestLLMProfilePersistence:
         assert registry.get("code-gen").model == "claude-3"
         assert registry.get("code-gen").usage_id == "code-gen"
 
+    def test_get_llms_status(self):
+        """Test getting credential status for all LLMs in registry."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+        registry = LLMRegistry()
+
+        # Add LLM with direct credentials
+        llm1 = LLM(model="gpt-4o", api_key=SecretStr("key1"), usage_id="agent")
+        registry.add(llm1)
+
+        # Add LLM with auth profile
+        auth = LLMAuth(name="test-auth", credentials={"api_key": SecretStr("auth-key")})
+        LLMRegistry.save_auth_profile(auth, override_existing=True)
+        llm2 = LLM(model="gpt-3.5", usage_id="title-gen", auth_profile="test-auth")
+        registry.add(llm2)
+
+        # Add LLM with no credentials
+        llm3 = LLM(model="claude-3", usage_id="code-gen")
+        registry.add(llm3)
+
+        # Get status
+        status = registry.get_llms_status()
+
+        assert len(status) == 3
+        assert status["agent"] == LLMAuthStatus.DIRECT
+        assert status["title-gen"] == LLMAuthStatus.CONFIGURED
+        assert status["code-gen"] == LLMAuthStatus.MISSING
+
 
 class TestLLMAuthProfilePersistence:
     """Tests for auth profile save/load/delete functionality."""
