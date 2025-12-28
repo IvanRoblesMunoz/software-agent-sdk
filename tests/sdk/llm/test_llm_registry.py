@@ -208,14 +208,24 @@ class TestLLMProfilePersistence:
         """Set up test environment before each test."""
         # Create temporary directory and patch profiles directory
         temp_dir = tempfile.TemporaryDirectory()
-        original_method = LLMRegistry._get_profiles_dir
+        original_llm_profiles_method = LLMRegistry._get_profiles_dir
+        original_registry_profiles_method = LLMRegistry._get_registry_profiles_dir
 
         def mock_get_profiles_dir():
             path = Path(temp_dir.name) / "llm_profiles"
             path.mkdir(parents=True, exist_ok=True)
             return path
 
+        def mock_get_registry_profiles_dir():
+            path = Path(temp_dir.name) / "registry_profiles"
+            path.mkdir(parents=True, exist_ok=True)
+            return path
+
         LLMRegistry._get_profiles_dir = staticmethod(mock_get_profiles_dir)
+        LLMRegistry._get_registry_profiles_dir = staticmethod(
+            mock_get_registry_profiles_dir
+        )
+
         sample_llm = LLM(
             model="openai/gpt-4o",
             api_key=SecretStr("sk-test-key-12345"),
@@ -230,7 +240,8 @@ class TestLLMProfilePersistence:
         yield
 
         # Cleanup
-        LLMRegistry._get_profiles_dir = original_method
+        LLMRegistry._get_profiles_dir = original_llm_profiles_method
+        LLMRegistry._get_registry_profiles_dir = original_registry_profiles_method
         temp_dir.cleanup()
         if "OPENHANDS_ENCRYPTION_KEY" in os.environ:
             del os.environ["OPENHANDS_ENCRYPTION_KEY"]
@@ -238,7 +249,8 @@ class TestLLMProfilePersistence:
     def test_save_llm_profile_with_cipher_encrypts(self):
         """Test that profiles are encrypted when OPENHANDS_ENCRYPTION_KEY is set."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        LLMRegistry.save_llm_profile("test", self.sample_llm)
+        self.sample_llm.profile_name = "test"
+        LLMRegistry.save_llm_profile(self.sample_llm)
 
         content = (Path(self.temp_dir.name) / "llm_profiles" / "test.json").read_text()
         # Verify the original secret is not in plaintext
@@ -252,8 +264,9 @@ class TestLLMProfilePersistence:
         """
         Test saving and loading without cipher. Secrets redacted and warning logged.
         """
+        self.sample_llm.profile_name = "test"
         with patch("openhands.sdk.llm.llm_registry.logger") as mock_logger:
-            LLMRegistry.save_llm_profile("test", self.sample_llm)
+            LLMRegistry.save_llm_profile(self.sample_llm)
             mock_logger.warning.assert_called_once()
             assert "without encryption" in str(mock_logger.warning.call_args)
 
@@ -267,13 +280,19 @@ class TestLLMProfilePersistence:
 
     def test_save_llm_profile_override_existing(self):
         """Test override_existing flag."""
-        LLMRegistry.save_llm_profile("test", self.sample_llm)
+        self.sample_llm.profile_name = "test"
+        LLMRegistry.save_llm_profile(self.sample_llm)
 
         with pytest.raises(FileExistsError, match="already exists"):
-            LLMRegistry.save_llm_profile("test", self.sample_llm)
+            LLMRegistry.save_llm_profile(self.sample_llm)
 
-        new_llm = LLM(model="gpt-3.5", api_key=SecretStr("new"), usage_id="test")
-        LLMRegistry.save_llm_profile("test", new_llm, override_existing=True)
+        new_llm = LLM(
+            model="gpt-3.5",
+            api_key=SecretStr("new"),
+            usage_id="test",
+            profile_name="test",
+        )
+        LLMRegistry.save_llm_profile(new_llm, override_existing=True)
         assert LLMRegistry.load_llm_profile("test").model == "gpt-3.5"
 
     def test_load_llm_profile_not_found(self):
@@ -284,7 +303,8 @@ class TestLLMProfilePersistence:
     def test_load_llm_profile_round_trip(self):
         """Test save then load preserves all attributes."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        LLMRegistry.save_llm_profile("test", self.sample_llm)
+        self.sample_llm.profile_name = "test"
+        LLMRegistry.save_llm_profile(self.sample_llm)
 
         loaded = LLMRegistry.load_llm_profile("test")
         assert loaded.model == self.sample_llm.model
@@ -296,12 +316,13 @@ class TestLLMProfilePersistence:
             loaded.api_key.get_secret_value()
             == self.sample_llm.api_key.get_secret_value()
         )
-        assert loaded.usage_id == self.sample_llm.usage_id
+        assert loaded.profile_name == "test"
         assert loaded.temperature == self.sample_llm.temperature
 
     def test_delete_llm_profile_success(self):
         """Test successful profile deletion."""
-        LLMRegistry.save_llm_profile("test", self.sample_llm)
+        self.sample_llm.profile_name = "test"
+        LLMRegistry.save_llm_profile(self.sample_llm)
         profile_path = Path(self.temp_dir.name) / "llm_profiles" / "test.json"
         assert profile_path.exists()
 
@@ -319,9 +340,12 @@ class TestLLMProfilePersistence:
 
     def test_list_llm_profiles_multiple(self):
         """Test listing multiple profiles."""
-        LLMRegistry.save_llm_profile("p1", self.sample_llm)
-        LLMRegistry.save_llm_profile("p2", self.sample_llm)
-        LLMRegistry.save_llm_profile("p3", self.sample_llm)
+        self.sample_llm.profile_name = "p1"
+        LLMRegistry.save_llm_profile(self.sample_llm)
+        self.sample_llm.profile_name = "p2"
+        LLMRegistry.save_llm_profile(self.sample_llm)
+        self.sample_llm.profile_name = "p3"
+        LLMRegistry.save_llm_profile(self.sample_llm)
 
         profiles = LLMRegistry.list_llm_profiles()
         assert len(profiles) == 3
@@ -329,7 +353,8 @@ class TestLLMProfilePersistence:
 
     def test_list_llm_profiles_returns_names_only(self):
         """Test that list_llm_profiles returns just names, not paths."""
-        LLMRegistry.save_llm_profile("test", self.sample_llm)
+        self.sample_llm.profile_name = "test"
+        LLMRegistry.save_llm_profile(self.sample_llm)
         profiles = LLMRegistry.list_llm_profiles()
         assert profiles == ["test"]
         assert not any("/" in p or ".json" in p for p in profiles)
@@ -337,11 +362,21 @@ class TestLLMProfilePersistence:
     def test_full_profile_workflow(self):
         """Test complete workflow: save, list, load, delete."""
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
-        llm1 = LLM(model="gpt-4o", api_key=SecretStr("key1"), usage_id="agent")
-        llm2 = LLM(model="gpt-3.5", api_key=SecretStr("key2"), usage_id="condenser")
+        llm1 = LLM(
+            model="gpt-4o",
+            api_key=SecretStr("key1"),
+            usage_id="agent",
+            profile_name="agent",
+        )
+        llm2 = LLM(
+            model="gpt-3.5",
+            api_key=SecretStr("key2"),
+            usage_id="condenser",
+            profile_name="condenser",
+        )
 
-        LLMRegistry.save_llm_profile("agent", llm1)
-        LLMRegistry.save_llm_profile("condenser", llm2)
+        LLMRegistry.save_llm_profile(llm1)
+        LLMRegistry.save_llm_profile(llm2)
 
         assert len(LLMRegistry.list_llm_profiles()) == 2
         assert LLMRegistry.load_llm_profile("agent").model == "gpt-4o"
@@ -355,7 +390,7 @@ class TestLLMProfilePersistence:
         "name,should_raise,error_match",
         [
             # Invalid names
-            ("", True, "cannot be.*empty"),
+            ("", True, "must have profile_name set"),
             (".", True, "cannot be"),
             ("..", True, "cannot be"),
             ("test/profile", True, "path separators"),
@@ -373,9 +408,157 @@ class TestLLMProfilePersistence:
     )
     def test_validate_profile_name(self, name, should_raise, error_match):
         """Test profile name validation."""
+        self.sample_llm.profile_name = name
         if should_raise:
             with pytest.raises(ValueError, match=error_match):
-                LLMRegistry.save_llm_profile(name, self.sample_llm)
+                LLMRegistry.save_llm_profile(self.sample_llm)
         else:
-            LLMRegistry.save_llm_profile(name, self.sample_llm, override_existing=True)
+            LLMRegistry.save_llm_profile(self.sample_llm, override_existing=True)
             assert name in LLMRegistry.list_llm_profiles()
+
+    def test_save_llm_profile_requires_profile_name(self):
+        """Test that save_llm_profile requires profile_name to be set."""
+        llm = LLM(model="gpt-4o", api_key=SecretStr("key"))
+        # profile_name not set
+        with pytest.raises(ValueError, match="must have profile_name set"):
+            LLMRegistry.save_llm_profile(llm)
+
+    def test_load_llm_profile_with_usage_id(self):
+        """Test loading profile with custom usage_id."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+        self.sample_llm.profile_name = "test"
+        LLMRegistry.save_llm_profile(self.sample_llm)
+
+        loaded = LLMRegistry.load_llm_profile("test", usage_id="custom-usage")
+        assert loaded.profile_name == "test"
+        assert loaded.usage_id == "custom-usage"
+
+    def test_save_registry_profile(self):
+        """Test saving a registry profile."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+        registry = LLMRegistry(profile_name="test-registry")
+
+        llm1 = LLM(
+            model="gpt-4o",
+            api_key=SecretStr("key1"),
+            usage_id="agent",
+            profile_name="agent",
+        )
+        llm2 = LLM(
+            model="gpt-3.5",
+            api_key=SecretStr("key2"),
+            usage_id="title-gen",
+            profile_name="title-gen",
+        )
+
+        registry.add(llm1)
+        registry.add(llm2)
+
+        LLMRegistry.save_registry_profile(registry)
+
+        # Verify file exists
+        registry_path = (
+            Path(self.temp_dir.name) / "registry_profiles" / "test-registry.json"
+        )
+        assert registry_path.exists()
+
+    def test_load_registry_profile(self):
+        """Test loading a registry profile."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+        registry = LLMRegistry(profile_name="test-registry")
+
+        llm1 = LLM(model="gpt-4o", api_key=SecretStr("key1"), usage_id="agent")
+        llm2 = LLM(model="gpt-3.5", api_key=SecretStr("key2"), usage_id="title-gen")
+
+        registry.add(llm1)
+        registry.add(llm2)
+
+        LLMRegistry.save_registry_profile(registry)
+
+        # Load it back
+        loaded_registry = LLMRegistry.load_registry_profile("test-registry")
+        assert loaded_registry.profile_name == "test-registry"
+        assert len(loaded_registry.list_usage_ids()) == 2
+        assert "agent" in loaded_registry.list_usage_ids()
+        assert "title-gen" in loaded_registry.list_usage_ids()
+
+        loaded_llm1 = loaded_registry.get("agent")
+        assert loaded_llm1.model == "gpt-4o"
+        assert loaded_llm1.usage_id == "agent"
+
+    def test_save_registry_profile_requires_profile_name(self):
+        """Test that save_registry_profile requires profile_name to be set."""
+        registry = LLMRegistry()  # No profile_name
+        with pytest.raises(ValueError, match="must have profile_name set"):
+            LLMRegistry.save_registry_profile(registry)
+
+    def test_list_registry_profiles(self):
+        """Test listing registry profiles."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+
+        reg1 = LLMRegistry(profile_name="reg1")
+        reg1.add(LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="test"))
+        LLMRegistry.save_registry_profile(reg1)
+
+        reg2 = LLMRegistry(profile_name="reg2")
+        reg2.add(LLM(model="gpt-3.5", api_key=SecretStr("key"), usage_id="test"))
+        LLMRegistry.save_registry_profile(reg2)
+
+        profiles = LLMRegistry.list_registry_profiles()
+        assert len(profiles) == 2
+        assert set(profiles) == {"reg1", "reg2"}
+
+    def test_delete_registry_profile(self):
+        """Test deleting a registry profile."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+        registry = LLMRegistry(profile_name="test-registry")
+        registry.add(LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="test"))
+        LLMRegistry.save_registry_profile(registry)
+
+        registry_path = (
+            Path(self.temp_dir.name) / "registry_profiles" / "test-registry.json"
+        )
+        assert registry_path.exists()
+
+        LLMRegistry.delete_registry_profile("test-registry")
+        assert not registry_path.exists()
+
+    def test_add_llms_from_profiles(self):
+        """Test adding multiple LLMs from profiles to a registry."""
+        os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
+
+        # Create and save some LLM profiles
+        llm1 = LLM(model="gpt-4o", api_key=SecretStr("key1"), profile_name="profile1")
+        llm2 = LLM(model="gpt-3.5", api_key=SecretStr("key2"), profile_name="profile2")
+        llm3 = LLM(model="claude-3", api_key=SecretStr("key3"), profile_name="profile3")
+
+        LLMRegistry.save_llm_profile(llm1)
+        LLMRegistry.save_llm_profile(llm2)
+        LLMRegistry.save_llm_profile(llm3)
+
+        # Create registry and bulk load
+        registry = LLMRegistry()
+        registry.add_llms_from_profiles(
+            {
+                "agent": "profile1",
+                "title-gen": "profile2",
+                "code-gen": "profile3",
+            }
+        )
+
+        # Verify all were loaded with correct usage_ids
+        assert len(registry.list_usage_ids()) == 3
+        assert set(registry.list_usage_ids()) == {"agent", "title-gen", "code-gen"}
+
+        # Verify LLMs have correct models and usage_ids
+        assert registry.get("agent").model == "gpt-4o"
+        assert registry.get("agent").usage_id == "agent"
+        assert registry.get("agent").profile_name == "profile1"
+
+        assert registry.get("title-gen").model == "gpt-3.5"
+        assert registry.get("title-gen").usage_id == "title-gen"
+        assert registry.get("title-gen").profile_name == "profile2"
+
+        assert registry.get("code-gen").model == "claude-3"
+        assert registry.get("code-gen").usage_id == "code-gen"
+        assert registry.get("code-gen").profile_name == "profile3"

@@ -122,6 +122,12 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
     # =========================================================================
     model: str = Field(default="claude-sonnet-4-20250514", description="Model name.")
     api_key: str | SecretStr | None = Field(default=None, description="API key.")
+    profile_name: str | None = Field(
+        default=None,
+        description=(
+            "Name of the profile this LLM was loaded from or should be saved to."
+        ),
+    )
     base_url: str | None = Field(default=None, description="Custom base URL.")
     api_version: str | None = Field(
         default=None, description="API version (e.g., Azure)."
