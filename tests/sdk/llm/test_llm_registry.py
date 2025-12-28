@@ -429,7 +429,7 @@ class TestLLMProfilePersistence:
         registry.add(llm1)
         registry.add(llm2)
 
-        LLMRegistry.save_registry_profile("test-registry", registry)
+        registry.save_registry_profile("test-registry")
 
         # Verify file exists
         registry_path = (
@@ -448,7 +448,7 @@ class TestLLMProfilePersistence:
         registry.add(llm1)
         registry.add(llm2)
 
-        LLMRegistry.save_registry_profile("test-registry", registry)
+        registry.save_registry_profile("test-registry")
 
         # Load it back
         loaded_registry = LLMRegistry.load_registry_profile("test-registry")
@@ -467,7 +467,7 @@ class TestLLMProfilePersistence:
 
         # Test with invalid name
         with pytest.raises(ValueError, match="alphanumerics"):
-            LLMRegistry.save_registry_profile("invalid name", registry)
+            registry.save_registry_profile("invalid name")
 
     def test_list_registry_profiles(self):
         """Test listing registry profiles."""
@@ -475,11 +475,11 @@ class TestLLMProfilePersistence:
 
         reg1 = LLMRegistry()
         reg1.add(LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="test"))
-        LLMRegistry.save_registry_profile("reg1", reg1)
+        reg1.save_registry_profile("reg1")
 
         reg2 = LLMRegistry()
         reg2.add(LLM(model="gpt-3.5", api_key=SecretStr("key"), usage_id="test"))
-        LLMRegistry.save_registry_profile("reg2", reg2)
+        reg2.save_registry_profile("reg2")
 
         profiles = LLMRegistry.list_registry_profiles()
         assert len(profiles) == 2
@@ -490,7 +490,7 @@ class TestLLMProfilePersistence:
         os.environ["OPENHANDS_ENCRYPTION_KEY"] = "test-key"
         registry = LLMRegistry()
         registry.add(LLM(model="gpt-4o", api_key=SecretStr("key"), usage_id="test"))
-        LLMRegistry.save_registry_profile("test-registry", registry)
+        registry.save_registry_profile("test-registry")
 
         registry_path = (
             Path(self.temp_dir.name) / "registry_profiles" / "test-registry.json"

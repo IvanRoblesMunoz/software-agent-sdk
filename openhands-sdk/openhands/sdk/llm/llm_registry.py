@@ -273,26 +273,21 @@ class LLMRegistry:
         """List the names of all available registry profiles."""
         return [f.stem for f in cls._get_registry_profiles_dir().glob("*.json")]
 
-    @classmethod
     def save_registry_profile(
-        cls,
+        self,
         name: str,
-        registry: "LLMRegistry",
         override_existing: bool = False,
     ) -> None:
-        """Save a registry with all its LLMs as a named profile.
-
-        Secrets are encrypted if OPENHANDS_ENCRYPTION_KEY is set.
-        """
-        cls._validate_profile_name(name)
-        profile_path = cls._get_registry_profile_path(name)
+        """Save this registry with all its LLMs as a named profile."""
+        self._validate_profile_name(name)
+        profile_path = self._get_registry_profile_path(name)
         if profile_path.exists() and not override_existing:
             raise FileExistsError(
                 f"Registry profile '{name}' already exists. "
                 "Use override_existing=True to overwrite."
             )
 
-        context = cls._get_cipher_context()
+        context = self._get_cipher_context()
         has_cipher = "cipher" in context
 
         if not has_cipher:
@@ -304,7 +299,7 @@ class LLMRegistry:
 
         # Serialize all LLMs in the registry
         llms_data = {}
-        for usage_id, llm in registry._usage_to_llm.items():
+        for usage_id, llm in self._usage_to_llm.items():
             llms_data[usage_id] = llm.model_dump(context=context, mode="json")
 
         registry_data = {"llms": llms_data}

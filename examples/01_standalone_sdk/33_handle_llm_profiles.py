@@ -81,9 +81,7 @@ agent_llm = registry.get("agent")
 print(f"✓ Agent LLM: {agent_llm.model} (usage: {agent_llm.usage_id})")
 
 # Save entire registry as a profile
-LLMRegistry.save_registry_profile(
-    "my-multi-llm-setup", registry, override_existing=True
-)
+registry.save_registry_profile("my-multi-llm-setup", override_existing=True)
 print(
     "✓ Saved registry profile 'my-multi-llm-setup' "
     "to ~/.openhands/llm_registry_profiles/"
