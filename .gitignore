@@ -211,3 +211,7 @@ agent-sdk.workspace.code-workspace
 
 # Integration test outputs
 tests/integration/outputs/
+
+# LLM auth profiles (stored in ~/.openhands/auth_profiles/)
+# Prevent accidental commits of local auth credential files
+**/auth_profiles/

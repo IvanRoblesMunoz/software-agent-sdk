@@ -21,6 +21,7 @@ from pydantic import (
 )
 from pydantic.json_schema import SkipJsonSchema
 
+from openhands.sdk.llm.llm_auth import LLMAuthStatus
 from openhands.sdk.llm.utils.model_info import get_litellm_model_info
 from openhands.sdk.utils.pydantic_secrets import serialize_secret, validate_secret
 
@@ -122,6 +123,11 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
     # =========================================================================
     model: str = Field(default="claude-sonnet-4-20250514", description="Model name.")
     api_key: str | SecretStr | None = Field(default=None, description="API key.")
+    auth_profile: str | None = Field(
+        default=None,
+        description="Auth profile name. When set, credentials are loaded from the "
+        "profile and api_key/aws_* fields are ignored. No fallback to env vars.",
+    )
     base_url: str | None = Field(default=None, description="Custom base URL.")
     api_version: str | None = Field(
         default=None, description="API version (e.g., Azure)."
@@ -384,6 +390,28 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
         return d
 
     @model_validator(mode="after")
+    def _resolve_auth(self):
+        """Resolve auth_profile if set, loading credentials from disk."""
+        self._refresh_auth_profile()
+        return self
+
+    def _refresh_auth_profile(self) -> None:
+        if not self.auth_profile:
+            return
+
+        from openhands.sdk.llm.llm_registry import LLMRegistry
+
+        try:
+            auth = LLMRegistry.load_auth_profile(self.auth_profile)
+        except FileNotFoundError:
+            return
+
+        # Apply credentials from auth profile
+        for key, value in auth.credentials.items():
+            if value is not None and hasattr(self, key):
+                setattr(self, key, value)
+
+    @model_validator(mode="after")
     def _set_env_side_effects(self):
         if self.openrouter_site_url:
             os.environ["OR_SITE_URL"] = self.openrouter_site_url
@@ -451,6 +479,34 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
     # Public API
     # =========================================================================
     @property
+    def credentials_status(self) -> LLMAuthStatus:
+        """Get the current credential configuration status"""
+        from openhands.sdk.llm.llm_registry import LLMRegistry
+
+        if self.auth_profile:
+            # Auth profile is set - check if it exists and has credentials
+            try:
+                auth = LLMRegistry.load_auth_profile(self.auth_profile)
+                return auth.status
+            except FileNotFoundError:
+                return LLMAuthStatus.NOT_CONFIGURED
+
+        # No auth profile - check direct credentials
+        if self.api_key or self.aws_access_key_id:
+            return LLMAuthStatus.DIRECT
+
+        return LLMAuthStatus.MISSING
+
+    @property
+    def has_valid_credentials(self) -> bool:
+        """Check if LLM has valid credentials configured."""
+
+        return self.credentials_status in (
+            LLMAuthStatus.CONFIGURED,
+            LLMAuthStatus.DIRECT,
+        )
+
+    @property
     def metrics(self) -> Metrics:
         """Get usage metrics for this LLM instance.
 
@@ -517,6 +573,8 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
                 raise ValueError("Streaming requires an on_token callback")
             kwargs["stream"] = True
 
+        # Refresh at runtime to ensure sync with saved llm auth profiles
+        self._refresh_auth_profile()
         # 1) serialize messages
         formatted_messages = self.format_messages_for_llm(messages)
 
@@ -651,6 +709,8 @@ class LLM(BaseModel, RetryMixin, NonNativeToolCallingMixin):
         if kwargs.get("stream", False) or self.stream or on_token is not None:
             raise ValueError("Streaming is not supported for Responses API yet")
 
+        # Refresh at runtime to ensure sync with saved llm auth profiles
+        self._refresh_auth_profile()
         # Build instructions + input list using dedicated Responses formatter
         instructions, input_items = self.format_messages_for_responses(messages)
 

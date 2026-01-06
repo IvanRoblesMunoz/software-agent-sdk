@@ -9,6 +9,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict
 
 from openhands.sdk.llm.llm import LLM
+from openhands.sdk.llm.llm_auth import LLMAuth, LLMAuthStatus
 from openhands.sdk.logger import get_logger
 from openhands.sdk.utils.pydantic_secrets import Cipher
 
@@ -20,7 +21,7 @@ _VALID_LLM_PROFILE_NAME_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class RegistryEvent(BaseModel):
-    llm: LLM
+    llm: "LLM"
 
     model_config: ClassVar[ConfigDict] = ConfigDict(
         arbitrary_types_allowed=True,
@@ -37,6 +38,9 @@ class LLMRegistry:
     registry_id: str
     retry_listener: Callable[[int, int], None] | None
 
+    # =========================================================================
+    # Public API
+    # =========================================================================
     def __init__(
         self,
         retry_listener: Callable[[int, int], None] | None = None,
@@ -77,7 +81,7 @@ class LLMRegistry:
 
         return self._usage_to_llm
 
-    def add(self, llm: LLM) -> None:
+    def add(self, llm: "LLM") -> None:
         """Add an LLM instance to the registry.
 
         Args:
@@ -101,7 +105,7 @@ class LLMRegistry:
             f"[LLM registry {self.registry_id}]: Added LLM for usage {usage_id}"
         )
 
-    def get(self, usage_id: str) -> LLM:
+    def get(self, usage_id: str) -> "LLM":
         """Get an LLM instance from the registry.
 
         Args:
@@ -129,6 +133,24 @@ class LLMRegistry:
 
         return list(self._usage_to_llm.keys())
 
+    def get_llms_status(self) -> dict[str, LLMAuthStatus]:
+        """Get the credential status for all LLMs in the registry.
+
+        Returns:
+            Dictionary mapping usage_id to credential status.
+
+        Example:
+            >>> registry = LLMRegistry()
+            >>> # ... add LLMs ...
+            >>> status = registry.get_llms_status()
+            >>> print(status)
+            {'agent': LLMAuthStatus.CONFIGURED, 'title-gen': LLMAuthStatus.DIRECT}
+        """
+        return {
+            usage_id: llm.credentials_status
+            for usage_id, llm in self._usage_to_llm.items()
+        }
+
     def add_llms_from_profiles(self, usage_to_profile: dict[str, str]) -> None:
         """Load and add multiple LLM profiles to the registry.
 
@@ -147,6 +169,9 @@ class LLMRegistry:
             llm = self.load_llm_profile(profile_name, usage_id=usage_id)
             self.add(llm)
 
+    # =========================================================================
+    # LLM profile helpers
+    # =========================================================================
     @staticmethod
     def _get_profiles_dir() -> Path:
         """Get the standard directory for LLM profiles."""
@@ -356,3 +381,99 @@ class LLMRegistry:
 
         profile_path.unlink()
         logger.info(f"Deleted registry profile '{name}'")
+
+    # =========================================================================
+    # Auth profile helpers
+    # =========================================================================
+    @staticmethod
+    def _get_auth_profiles_dir() -> Path:
+        """Get the standard directory for auth profiles."""
+        path = Path.home() / ".openhands" / "auth_profiles"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+    @classmethod
+    def _get_auth_profile_path(cls, name: str) -> Path:
+        return cls._get_auth_profiles_dir() / f"{name}.json"
+
+    @classmethod
+    def list_auth_profiles(
+        cls, status_filter: LLMAuthStatus | None = None
+    ) -> list[str]:
+        """List available auth profiles, optionally filtered by status.
+
+        Args:
+            status_filter: If provided, only return profiles matching this status.
+
+        Returns:
+            List of profile names matching the filter criteria.
+        """
+        profiles = [f.stem for f in cls._get_auth_profiles_dir().glob("*.json")]
+        if status_filter is None:
+            return profiles
+
+        # Filter by status - need to load and check each profile
+        filtered = []
+        for name in profiles:
+            try:
+                auth = cls.load_auth_profile(name)
+                if auth.status == status_filter:
+                    filtered.append(name)
+            except Exception:
+                # Skip profiles that fail to load
+                continue
+        return filtered
+
+    @classmethod
+    def save_auth_profile(cls, auth: LLMAuth, override_existing: bool = False) -> None:
+        """Save an auth profile.
+
+        Secrets are automatically encrypted if OPENHANDS_ENCRYPTION_KEY is set.
+        """
+        name = auth.name
+        profile_path = cls._get_auth_profile_path(name)
+        if profile_path.exists() and not override_existing:
+            raise FileExistsError(
+                f"Auth profile '{name}' already exists. "
+                "Use override_existing=True to overwrite."
+            )
+
+        context = cls._get_cipher_context()
+        has_cipher = "cipher" in context
+
+        if not has_cipher:
+            logger.warning(
+                f"Saving auth profile '{name}' without encryption. "
+                "Secrets will be redacted. "
+                "Set OPENHANDS_ENCRYPTION_KEY environment variable to encrypt secrets."
+            )
+
+        with open(profile_path, "w") as f:
+            json.dump(auth.model_dump(context=context, mode="json"), f, indent=2)
+
+        status = "encrypted" if has_cipher else "redacted"
+        logger.info(f"Saved auth profile '{name}' ({status} keys) to {profile_path}")
+
+    @classmethod
+    def load_auth_profile(cls, name: str) -> LLMAuth:
+        """Load an auth profile from disk."""
+        profile_path = cls._get_auth_profile_path(name)
+        if not profile_path.exists():
+            raise FileNotFoundError(f"Auth profile '{name}' not found.")
+
+        with open(profile_path) as f:
+            data = json.load(f)
+
+        auth = LLMAuth.model_validate(data, context=cls._get_cipher_context())
+        logger.info(f"Loaded auth profile '{name}'")
+        return auth
+
+    @classmethod
+    def delete_auth_profile(cls, name: str) -> None:
+        """Delete an auth profile from disk."""
+        profile_path = cls._get_auth_profile_path(name)
+        if not profile_path.exists():
+            raise FileNotFoundError(f"Auth profile '{name}' not found.")
+
+        profile_path.unlink()
+        logger.info(f"Deleted auth profile '{name}'")
